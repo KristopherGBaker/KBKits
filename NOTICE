@@ -1,0 +1,13 @@
+KBKits
+Copyright 2026 Kristopher Baker
+
+The packages in this repository are provided under the Apache License 2.0. See `LICENSE`.
+
+KBKanaKit contains work derived from Tsurukame:
+
+  https://github.com/davidsansome/tsurukame
+  Copyright 2018-2025 David Sansome
+  Licensed under the Apache License, Version 2.0
+
+The derived files retain their original licence headers and identify their modifications.
+The complete package-specific attribution is in `Packages/KBKanaKit/NOTICE`.

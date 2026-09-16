@@ -1,0 +1,46 @@
+KBKanaKit
+Copyright 2026 Kristopher Baker
+
+This package contains work derived from third-party software.
+
+================================================================================
+Tsurukame
+================================================================================
+
+  https://github.com/davidsansome/tsurukame
+  Copyright 2018-2025 David Sansome
+  Licensed under the Apache License, Version 2.0
+  Licence text: LICENSE-Apache-2.0.txt
+
+The following files are derived from Tsurukame source. Each retains its original
+copyright and licence header and states that it was modified.
+
+  Sources/KBKanaKit/RomajiTable.swift
+      The replacement table, transcribed from `kReplacements` in
+      ios/TKMKanaInput.m. Modified: the escapes are resolved to literal kana and
+      the surrounding Objective-C is gone. Two entries diverge from the original
+      for IME parity: `la` maps to ぁ rather than ら, matching the `x` prefix and
+      every major IME, and `xtsu` (っ) is added alongside the original `ltsu` so
+      the l-prefix and x-prefix families stay in step. The rest are unchanged.
+
+  Sources/KBKanaKit/KanaConverter.swift
+  Sources/KBKanaKit/KanaInputEngine.swift
+  Sources/KBKanaKit/Kana.swift
+      The conversion rules around the table: the sokuon rule for a doubled
+      consonant, the ん rule for an `n` with nothing that can follow it, the
+      longest-match lookback, the uppercase-means-katakana convention, and the
+      dropping of a trailing unfinished syllable. All from ios/TKMKanaInput.m.
+      Modified: rewritten in Swift as pure functions with no UIKit and no text
+      field, split into a whole-string converter and a keystroke engine, and the
+      script folding is done by codepoint arithmetic rather than through
+      Foundation.
+
+  Tests/KBKanaKitTests/KanaInputEngineTests.swift
+      Four behavioural tests ported from ios/Tests/TKMKanaInputTest.m: the sokuon
+      sweep, the ん sweep, their uppercase counterparts, and the sweep that types
+      the last character of every spelling in the table. Modified: rewritten for
+      Swift Testing against strings rather than XCTest against a UITextField.
+
+Not taken: anything to do with UITextField, and the Objective-C Levenshtein
+category, which is reimplemented here over `Character` rather than UTF-16 code
+units.
