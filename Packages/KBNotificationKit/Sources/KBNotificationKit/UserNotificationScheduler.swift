@@ -18,6 +18,7 @@ protocol NotificationCentre: Sendable {
     func add(_ request: sending UNNotificationRequest) async throws
     func removePending(withIdentifiers ids: [String]) async
     func removeDelivered(withIdentifiers ids: [String]) async
+    func removeAllDelivered() async
     func removeAllPending() async
     func pendingIdentifiers() async -> [String]
     /// The pending notifications, reconstructed as the package's own value type. Returning
@@ -49,6 +50,10 @@ struct SystemNotificationCentre: NotificationCentre {
 
     func removeDelivered(withIdentifiers ids: [String]) async {
         center.removeDeliveredNotifications(withIdentifiers: ids)
+    }
+
+    func removeAllDelivered() async {
+        center.removeAllDeliveredNotifications()
     }
 
     func removeAllPending() async {
@@ -320,6 +325,10 @@ public struct UserNotificationScheduler: NotificationScheduler {
 
     public func cancelAll() async {
         await centre.removeAllPending()
+    }
+
+    public func clearDelivered() async {
+        await centre.removeAllDelivered()
     }
 
     public func pendingIdentifiers() async -> [String] {

@@ -51,6 +51,20 @@ struct SchedulerTests {
         #expect(await scheduler.pendingIdentifiers().isEmpty)
     }
 
+    @Test("The stub records a delivered clear and keeps the schedule")
+    func clearingDelivered() async throws {
+        let scheduler = StubNotificationScheduler()
+        await scheduler.schedule(notification(id: "a"))
+
+        await scheduler.clearDelivered()
+
+        #expect(await scheduler.deliveredClears == 1)
+        // The two sets are separate here for the same reason they are separate on the real centre:
+        // a caller that clears its lock screen has not cancelled anything.
+        #expect(await scheduler.pendingIdentifiers() == ["a"])
+        #expect(await scheduler.cancelled.isEmpty)
+    }
+
     @Test("scheduleIfAllowed stays silent without permission, and never prompts")
     func scheduleIfAllowed() async throws {
         // The prompt is a decision an app makes deliberately, at a moment the user understands,

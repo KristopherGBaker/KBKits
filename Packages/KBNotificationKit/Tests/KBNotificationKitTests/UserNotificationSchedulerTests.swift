@@ -19,6 +19,7 @@ private actor RecordingCentre: NotificationCentre {
     private(set) var removedPending: [String] = []
     private(set) var removedDelivered: [String] = []
     private(set) var removeAllCount = 0
+    private(set) var removeAllDeliveredCount = 0
     // Keyed by identifier so that adding the same id replaces the pending request, matching the
     // real centre. Non-Sendable requests never leave the actor: the readbacks below return only
     // Sendable projections (`LocalNotification`, `DateComponents`, the interruption-level enum).
@@ -53,6 +54,10 @@ private actor RecordingCentre: NotificationCentre {
 
     func removeDelivered(withIdentifiers ids: [String]) async {
         removedDelivered.append(contentsOf: ids)
+    }
+
+    func removeAllDelivered() async {
+        removeAllDeliveredCount += 1
     }
 
     func removeAllPending() async {
@@ -190,6 +195,23 @@ struct UserNotificationSchedulerTests {
         await scheduler.cancelAll()
         #expect(await centre.removeAllCount == 1)
         #expect(await scheduler.pendingIdentifiers().isEmpty)
+    }
+
+    @Test("clearing the delivered set leaves the schedule alone")
+    func clearingDelivered() async throws {
+        let centre = RecordingCentre()
+        let scheduler = UserNotificationScheduler(centre: centre)
+        try await scheduler.schedule(notification(id: "a"))
+        try await scheduler.schedule(notification(id: "b"))
+
+        await scheduler.clearDelivered()
+
+        #expect(await centre.removeAllDeliveredCount == 1)
+        // Pending and delivered are different sets. An app clearing its lock screen on being
+        // opened must not lose the reminders it has lined up for the rest of the week.
+        #expect(await scheduler.pendingIdentifiers() == ["a", "b"])
+        #expect(await centre.removeAllCount == 0)
+        #expect(await centre.removedPending.isEmpty)
     }
 
     @Test("the no-argument request asks the centre for exactly alert and sound")

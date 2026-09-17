@@ -10,6 +10,9 @@ public actor StubNotificationScheduler: NotificationScheduler {
     /// Every schedule call in order, including ones that replaced an earlier notification.
     public private(set) var scheduled: [LocalNotification] = []
     public private(set) var cancelled: [String] = []
+    /// How many times the delivered set was cleared. A count rather than a list, because the call
+    /// names nothing: it takes no identifiers and there is no delivery to model here.
+    public private(set) var deliveredClears = 0
     public private(set) var authorizationRequests = 0
     /// The authorisation categories requested, in order, one entry per `requestAuthorization`
     /// call. A no-argument call records `defaultAuthorizationOptions`.
@@ -56,6 +59,12 @@ public actor StubNotificationScheduler: NotificationScheduler {
     public func cancelAll() async {
         cancelled.append(contentsOf: pending.keys)
         pending.removeAll()
+    }
+
+    /// Records the call and leaves the pending set alone, which is the real behaviour: delivered
+    /// and pending are different sets, and clearing the first schedules and unschedules nothing.
+    public func clearDelivered() async {
+        deliveredClears += 1
     }
 
     public func pendingIdentifiers() async -> [String] {

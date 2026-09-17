@@ -34,6 +34,9 @@ struct SourceCompatibilityTests {
         // The new members resolve to their defaults on a conformer that does not implement them.
         _ = await scheduler.requestAuthorization(options: [.alert, .sound, .badge])
         #expect(await scheduler.pendingNotifications().isEmpty)
+        // Clearing the delivered set defaults to doing nothing, which is the only honest default:
+        // a conformer that knows nothing about delivery cannot clear one.
+        await scheduler.clearDelivered()
 
         // The initializer form that existed before this change, with no new arguments supplied.
         let note = LocalNotification(

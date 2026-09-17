@@ -175,6 +175,19 @@ public protocol NotificationScheduler: Sendable {
     func cancel(id: String) async
     func cancelAll() async
 
+    /// Removes everything this app has already DELIVERED, clearing what is stacked up in
+    /// Notification Centre.
+    ///
+    /// Pending and delivered are two different sets, and nothing else here touches the second one
+    /// wholesale: `cancel(id:)` takes the delivered copy of the one id it cancels, and `cancelAll`
+    /// is about the schedule. The case this covers is an app being opened to find a week of its
+    /// own announcements still sitting on the lock screen, which it has no way to name one at a
+    /// time and no reason to keep: the user is looking at the app itself.
+    ///
+    /// No identifier filter, because there is nothing to protect from one. Delivered notifications
+    /// belong to the app that posted them, so this can only ever reach the caller's own.
+    func clearDelivered() async
+
     /// The ids currently pending, for a caller that wants to reconcile rather than track. This is
     /// the cheaper call; reconcile paths should prefer it to `pendingNotifications()`.
     func pendingIdentifiers() async -> [String]
@@ -195,6 +208,12 @@ public extension NotificationScheduler {
     func requestAuthorization(options: Set<NotificationAuthorizationOption>) async -> NotificationAuthorization {
         await requestAuthorization()
     }
+
+    /// Clears nothing by default.
+    ///
+    /// This default exists only so a type conforming to `NotificationScheduler` before this
+    /// method existed keeps compiling. The schedulers shipped here override it.
+    func clearDelivered() async {}
 
     /// Returns no pending notifications by default.
     ///

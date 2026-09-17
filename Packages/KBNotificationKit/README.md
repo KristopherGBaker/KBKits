@@ -9,8 +9,8 @@ the notification centre already holds.
 
 ## Key types
 
-- `NotificationScheduler` - `schedule`, `cancel(id:)`, `cancelAll`, `pendingIdentifiers`,
-  `pendingNotifications`, plus authorization. `requestAuthorization()` asks for the default set;
+- `NotificationScheduler` - `schedule`, `cancel(id:)`, `cancelAll`, `clearDelivered`,
+  `pendingIdentifiers`, `pendingNotifications`, plus authorization. `requestAuthorization()` asks for the default set;
   `requestAuthorization(options:)` lets the caller choose. `scheduleIfAllowed` is the derived
   convenience. `pendingIdentifiers` is the cheap reconcile call; `pendingNotifications` returns the
   full notifications for a caller that wants to SHOW what is scheduled.
@@ -42,6 +42,10 @@ the notification centre already holds.
   moment the user understands, not as a side effect of a background action.
 - **Cancelling removes DELIVERED notifications too.** A rest alert still sitting in Notification
   Centre after the next set has started is worse than no alert.
+- **`clearDelivered` clears what has been delivered and schedules nothing.** Pending and delivered
+  are different sets, and it touches only the second: an app clearing its own stack on being opened
+  keeps every reminder it has lined up. It takes no identifiers because there is nothing to protect
+  from it - a delivered notification belongs to the app that posted it.
 - **Authorisation categories are the caller's choice, defaulting to alert and sound.** A rest
   timer wants no badge, because a number left on the app icon after the alert has been read is
   litter; an app whose content IS the number adds `.badge`. The default set is unchanged, so an
