@@ -1,7 +1,228 @@
 KBKits
 Copyright 2026 Kristopher Baker
 
-The packages in this repository are provided under the Apache License 2.0. See `LICENSE`.
+The SOURCE CODE of the packages in this repository is provided under the Apache License 2.0.
+See `LICENSE`. Two bundled data files and one runtime download are NOT under that licence; the
+carve-outs below say which, under what, and what a consuming app has to do about it.
+
+
+====================================================================================
+1. Bundled dictionary data: CC BY-SA 4.0, not Apache-2.0
+====================================================================================
+
+These two files are committed in this repository and are covered by the Creative Commons
+Attribution-ShareAlike 4.0 International licence, whose full text is in
+`Licenses/CC-BY-SA-4.0.txt`:
+
+  Packages/KBDictionaryKit/Sources/KBDictionaryKit/Resources/jmdict-seed.sqlite
+  Packages/KBDictionaryKit/Sources/KBDictionaryKit/Resources/kanjidic.sqlite
+
+Nothing else in this repository is CC BY-SA. The Apache-2.0 grant in `LICENSE` does not reach
+either file, and describing them as Apache-2.0 or MIT would be wrong.
+
+------------------------------------------------------------------------------------
+1a. jmdict-seed.sqlite
+------------------------------------------------------------------------------------
+
+Two upstream works, both CC BY-SA 4.0, are combined in this one file.
+
+JMdict, the Japanese/English dictionary:
+
+  Copyright (c) James William Breen and The Electronic Dictionary Research and Development
+  Group (EDRDG), Monash University.
+  Licensed CC BY-SA 4.0.
+  Project:  https://www.edrdg.org/jmdict/j_jmdict.html
+  Licence:  https://www.edrdg.org/edrdg/licence.html
+  Source file: JMdict_e.gz from https://ftp.edrdg.org/pub/Nihongo/JMdict_e.gz
+
+JmdictFurigana, the per-kanji ruby segmentation of JMdict entries:
+
+  Copyright (c) Doublevil and the JmdictFurigana contributors.
+  The DATA is derived from JMdict and KANJIDIC and is distributed under the same CC BY-SA
+  terms as JMdict. The generator SOURCE is MIT, which does not apply to the rows embedded
+  here: what ships is data, so the data licence is the one that governs.
+  Project:  https://github.com/Doublevil/JmdictFurigana
+  Release:  JmdictFurigana 2.3.1, the snapshot the `furigana` rows were verified against
+            (recorded in `Tools/build-jmdict.swift`).
+
+Snapshot. EDRDG republishes JMdict daily, so the snapshot matters. Both source files were
+taken on 2025-08-21. JMdict's own creation date is carried in a comment at the head of the
+XML, which is the authoritative identification of any copy you rebuild from.
+
+Transformations applied. This is a DERIVED work, not a copy:
+
+  - Only a curated subset ships. The full JMdict is roughly 66 MB; this seed is 28 KB, a few
+    dozen common entries, and exists so a fresh checkout and a first launch have a working
+    dictionary before anything is downloaded or built. Apps supply a full dictionary through
+    `JMDictStore(databaseURL:)`.
+  - The XML is converted to SQLite and denormalized for read-only lookup:
+    `entry(id, senses_json)`, `entry_form(entry_id, form, is_kanji)` and
+    `furigana(form, reading, segmentation)`. Senses become one JSON blob per entry.
+  - Per-sense cross-references, dialects, information fields and non-English glosses are
+    dropped. Nothing is added to or altered in the meanings that remain.
+  - The JmdictFurigana rows are parsed from the upstream `kanji|reading|segmentation` line
+    format into the `furigana` table, with malformed lines skipped.
+
+Update procedure. `Tools/build-jmdict.swift` is the reproducible build, and it is what a
+rebuild must go through so the result stays a documented transformation:
+
+  1. Download `JMdict_e.gz` into `data/` from the URL above.
+  2. Download `JmdictFurigana.txt` into `data/` from the JmdictFurigana releases page, or
+     point `JMDICT_FURIGANA_PATH` at it.
+  3. `swift Tools/build-jmdict.swift out.sqlite` builds the full dictionary (roughly 66 MB,
+     for an app to ship or cache; it is not committed here).
+     `swift Tools/build-jmdict.swift --seed out.sqlite` rebuilds the committed seed.
+  4. Record the new snapshot date here, and the new JmdictFurigana release, whenever either
+     source is refreshed. An attribution that names the wrong snapshot is a broken
+     attribution.
+
+------------------------------------------------------------------------------------
+1b. kanjidic.sqlite
+------------------------------------------------------------------------------------
+
+KANJIDIC2, the per-character kanji dictionary:
+
+  Copyright (c) The Electronic Dictionary Research and Development Group (EDRDG),
+  Monash University.
+  Licensed CC BY-SA 4.0.
+  Project:  https://www.edrdg.org/wiki/index.php/KANJIDIC_Project
+  Licence:  https://www.edrdg.org/edrdg/licence.html
+  Source file: kanjidic2.xml.gz from https://www.edrdg.org/kanjidic/kanjidic2.xml.gz
+
+Snapshot. The source file was taken on 2025-09-07. As with JMdict, EDRDG republishes it, and
+the file's own header comment identifies the revision of any copy you rebuild from.
+
+Transformations applied. Again a DERIVED work:
+
+  - Filtered to roughly 3,100 of KANJIDIC2's roughly 13,000 characters: only those carrying a
+    school grade, a frequency rank or an old-JLPT level. The rest are historical variants and
+    personal-name characters a reader will not meet in a book. That filter is why this one
+    file can ship whole at 332 KB while JMdict cannot.
+  - Converted to SQLite as one read-only table:
+    `kanji(character, on_readings, kun_readings, meanings, stroke_count, grade, frequency)`,
+    with the three list columns as JSON arrays.
+  - The thirty-odd per-character dictionary index numbers (Nelson, Halpern, Heisig,
+    Morohashi and the rest), all non-English meanings, radical decompositions and codepoints
+    are dropped. Readings and English meanings are carried through unaltered.
+
+Update procedure. `Tools/build-kanjidic.swift`:
+
+  1. Download `kanjidic2.xml.gz` into `data/` from the URL above.
+  2. `swift Tools/build-kanjidic.swift Packages/KBDictionaryKit/Sources/KBDictionaryKit/Resources/kanjidic.sqlite`
+  3. Record the new snapshot date here.
+
+------------------------------------------------------------------------------------
+1c. What a consuming app must do
+------------------------------------------------------------------------------------
+
+Linking `KBDictionaryKit` puts CC BY-SA 4.0 data inside your application bundle, so you
+redistribute it. CC BY-SA 4.0 section 3(a) requires, in material that accompanies the
+distribution:
+
+  1. Credit the data in your About screen (or equivalent user-facing credits). Name JMdict
+     and the Electronic Dictionary Research and Development Group with James Breen, name
+     KANJIDIC2 and EDRDG, and name JmdictFurigana with Doublevil.
+  2. State that the data is licensed CC BY-SA 4.0 and include the licence text or a link to
+     <https://creativecommons.org/licenses/by-sa/4.0/>.
+  3. State that the data has been modified, and say how, or link to this file. The filtering
+     and reshaping described above are modifications under the licence.
+  4. Keep it separable from your own licence terms. The ShareAlike condition attaches to the
+     DATA and to adaptations of it, not to your application code, which is why these files are
+     carved out here rather than folded into the Apache-2.0 grant.
+
+
+====================================================================================
+2. Open JTalk runtime dictionary: three-clause BSD, downloaded and not redistributed here
+====================================================================================
+
+`KBJapaneseKit` downloads an Open JTalk dictionary on first use. It is not committed in this
+repository, and it is not Apache-2.0.
+
+  Archive:  open_jtalk_dic_utf_8-1.11.tar.gz
+  Release:  Open JTalk v1.11.1
+            https://github.com/r9y9/open_jtalk/releases/tag/v1.11.1
+  SHA-256:  fe6ba0e43542cef98339abdffd903e062008ea170b04e7e2a35da805902f382a
+
+Three three-clause BSD notices apply, one per part of the work:
+
+  - The Nara Institute of Science and Technology (NAIST), for the NAIST Japanese Dictionary.
+  - The UniDic Consortium, for the UniDic material carried in it.
+  - The Nagoya Institute of Technology, Department of Computer Science, and the HTS Working
+    Group, for Open JTalk itself. That notice is reproduced verbatim in
+    `Licenses/OpenJTalk-Engine-BSD.txt`.
+
+The archive carries its own complete `COPYING`, and that file is the authoritative text. The
+extractor writes every regular archive entry to disk, so `COPYING` is installed with the
+dictionary data and is never filtered out. Full detail, including what the extractor does and
+does not skip, is in `Licenses/OpenJTalk-Dictionary-NOTICES.md`.
+
+What a consuming app must do. Once the dictionary is on a user's device you have
+redistributed it. Reproduce all three notices, in full, from the archive's `COPYING` in your
+documentation or About material; keep the non-endorsement clauses intact; and leave `COPYING`
+in place in the installed directory. The upstream release directs users to that file rather
+than restating it, and so does this notice: a paraphrase is not a licence.
+
+
+====================================================================================
+3. MisakiSwift
+====================================================================================
+
+`KBJapaneseKit` depends on the `MisakiJapanese` product of a fork of MisakiSwift:
+
+  https://github.com/KristopherGBaker/MisakiSwift
+  Licensed under the Apache License 2.0.
+
+The fork vendors Open JTalk and MeCab C sources, each under a three-clause BSD licence:
+
+  - Open JTalk: Copyright (c) 2008-2016 Nagoya Institute of Technology, Department of
+    Computer Science, developed by the HTS Working Group.
+    Verbatim text: `Licenses/OpenJTalk-Engine-BSD.txt`.
+  - MeCab: Copyright (c) 2001-2008 Taku Kudo, Copyright (c) 2004-2008 Nippon Telegraph and
+    Telephone Corporation. Text at `Sources/COpenJTalk/openjtalk/mecab/COPYING` in the fork.
+
+Both notices must be preserved by anything that redistributes the binaries.
+
+
+====================================================================================
+4. Third-party dependencies
+====================================================================================
+
+MIT:
+
+  - GRDB.swift, Copyright (C) 2015-2025 Gwendal Roue.
+    https://github.com/groue/GRDB.swift
+  - SWCompression, Copyright (c) 2026 Timofey Solomko.
+    https://github.com/tsolomko/SWCompression
+  - BitByteData, Copyright (c) 2026 Timofey Solomko. Reached through SWCompression.
+    https://github.com/tsolomko/BitByteData
+
+Apache License 2.0:
+
+  - swift-crypto, Copyright 2019 The SwiftCrypto Project. Its NOTICE is preserved verbatim at
+    `Licenses/swift-crypto-NOTICE.txt` and must accompany any redistributed binary.
+    https://github.com/apple/swift-crypto
+  - swift-asn1, Copyright 2022 The SwiftASN1 Project. Reached through swift-crypto. Its
+    NOTICE is preserved verbatim at `Licenses/swift-asn1-NOTICE.txt`.
+    https://github.com/apple/swift-asn1
+
+Resolved transitively through MisakiSwift, and compiled but never executed by anything here:
+
+  - mlx-swift (MIT), Copyright (c) 2023 ml-explore.
+    https://github.com/ml-explore/mlx-swift
+  - MLXUtilsLibrary (Apache-2.0), https://github.com/KristopherGBaker/MLXUtilsLibrary
+  - ZIPFoundation (MIT), Copyright (c) 2017-2026 Thomas Zoechling. Forked at
+    https://github.com/KristopherGBaker/ZIPFoundation
+  - swift-numerics (Apache-2.0), https://github.com/apple/swift-numerics
+
+`KBJapaneseKit` takes only the `MisakiJapanese` product, which is the Open JTalk reading path
+with no MLX in it, so no MLX code is linked into a consumer of KBKits. The packages are still
+resolved and their notices still belong in this list. See README.md ("Before a release") for
+the plan to drop them.
+
+
+====================================================================================
+5. KBKanaKit
+====================================================================================
 
 KBKanaKit contains work derived from Tsurukame:
 
