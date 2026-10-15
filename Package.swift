@@ -10,6 +10,7 @@ let package = Package(
         .macOS(.v26)
     ],
     products: [
+        .library(name: "KBAnkiKit", targets: ["KBAnkiKit"]),
         .library(name: "KBCore", targets: ["KBCore"]),
         .library(name: "KBDictionaryKit", targets: ["KBDictionaryKit"]),
         .library(name: "KBJapaneseKit", targets: ["KBJapaneseKit"]),
@@ -39,9 +40,78 @@ let package = Package(
         // We take the `MisakiJapanese` product, NOT `MisakiSwift`: the former is the Open
         // JTalk reading path alone, with no mlx-swift and no CoreFoundation, which is what
         // keeps KBJapaneseKit in the `swift test` loop and able to cross-compile.
-        .package(url: "https://github.com/KristopherGBaker/MisakiSwift", branch: "feat/japanese-g2p")
+        .package(url: "https://github.com/KristopherGBaker/MisakiSwift", branch: "feat/japanese-g2p"),
+        // ==========================================================================
+        // BRANCH PIN, NOT A RELEASE. This fork has no tag yet either, and it MUST become a
+        // tagged version before KBKits itself is released, for the same reasons as the pin
+        // above. Tracked in README.md ("Before a release").
+        // ==========================================================================
+        // KBAnkiKit reads and writes zips with it (an `.apkg` is a zip). MisakiSwift pins the
+        // same fork, and SwiftPM keys package identity on the URL's last path component, so
+        // upstream `weichsel/ZIPFoundation` and this fork are ONE identity to it: the URL and
+        // branch here must stay character-identical to MisakiSwift's, or the two locations
+        // resolve to a pin that cannot be checked out. If one moves, this moves with it.
+        .package(url: "https://github.com/KristopherGBaker/ZIPFoundation", branch: "kits-android"),
+        // Anki's current export compresses the collection with zstd, which nothing else here
+        // can read: SWCompression ships Deflate/BZip2/LZMA/XZ/LZ4 and Apple's Compression
+        // framework has LZFSE/LZ4/LZMA/zlib. This is upstream zstd's own SwiftPM manifest, so it
+        // is the reference implementation rather than a wrapper. zstd is dual-licensed; KBKits
+        // takes it under BSD-3-Clause. See NOTICE.
+        .package(url: "https://github.com/facebook/zstd", from: "1.5.0"),
+        // SQLite off Apple platforms, for KBAnkiKit. An `.apkg` IS a SQLite database, so unlike
+        // KBDictionaryKit there is no seam to hide behind: the dependency is the format. Apple
+        // ships SQLite in the SDK; the Android NDK does not expose it, so this vendors the
+        // amalgamation. It is the Swift project's own package for this problem, so CVE and
+        // version bumps are not ours to chase.
+        .package(url: "https://github.com/swiftlang/swift-toolchain-sqlite", from: "1.0.12")
     ],
     targets: [
+        // Reading and writing Anki `.apkg` decks: the archive layout, the collection database
+        // inside it, and the note/note-type shapes an import or export needs. It knows Anki and
+        // nothing else: no card model, no scheduler, no mapping to any app's study types.
+        .target(
+            name: "KBAnkiKit",
+            dependencies: [
+                // SHA-1 for Anki's note checksum/guid. CryptoKit covers Apple; the condition
+                // matches KBCore's, from the same shared swift-crypto range.
+                .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.android])),
+                .product(name: "SwiftToolchainCSQLite", package: "swift-toolchain-sqlite",
+                         condition: .when(platforms: [.android, .linux])),
+                // Declared DIRECTLY, never leaned on transitively, and that is REQUIRED. Importing
+                // ZIPFoundation through another product compiles, because the module is
+                // visible, and `swift test` even links, because a test executable pulls in
+                // every transitive product. A consuming app's test bundle then fails with
+                // undefined ZIPFoundation symbols, because THIS target's own object files
+                // reference them and nothing linked the library for it. An import grep does
+                // not prove a dependency is unused; the check is removing it and LINKING.
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+                .product(name: "libzstd", package: "zstd")
+            ],
+            path: "Packages/KBAnkiKit/Sources/KBAnkiKit",
+            swiftSettings: .house
+        ),
+        .testTarget(
+            name: "KBAnkiKitTests",
+            dependencies: [
+                "KBAnkiKit",
+                // Tests COMPRESS their own fixtures, so a zstd collection is exercised end to
+                // end rather than through a checked-in blob nobody can regenerate.
+                .product(name: "libzstd", package: "zstd"),
+                // Declared directly, one per module the tests import themselves: they zip
+                // their own `.apkg` fixtures, and the collation tests open a bare SQLite
+                // connection to show what a reader without `unicase` sees.
+                .product(name: "ZIPFoundation", package: "ZIPFoundation"),
+                .product(name: "SwiftToolchainCSQLite", package: "swift-toolchain-sqlite",
+                         condition: .when(platforms: [.android, .linux]))
+            ],
+            path: "Packages/KBAnkiKit/Tests/KBAnkiKitTests",
+            resources: [
+                // Rust unicase 2.6.0's fold for every scalar it changes, dumped from the crate
+                // by Tools/generate-unicase-fold.sh: the oracle the collation is walked against.
+                .copy("Resources/unicase-2.6.0-folds.tsv")
+            ],
+            swiftSettings: .house
+        ),
         // App-neutral reading/document value types plus the portable text machinery
         // (tokenizing, segmenting, spoken-text normalization, hashing, downloads).
         .target(

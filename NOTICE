@@ -195,6 +195,22 @@ MIT:
     https://github.com/tsolomko/SWCompression
   - BitByteData, Copyright (c) 2026 Timofey Solomko. Reached through SWCompression.
     https://github.com/tsolomko/BitByteData
+  - ZIPFoundation, Copyright (c) 2017-2026 Thomas Zoechling. Forked at
+    https://github.com/KristopherGBaker/ZIPFoundation. Used by KBAnkiKit, which reads and
+    writes `.apkg` zips with it, and also resolved through MisakiSwift.
+  - unicase 2.6.0 (MIT OR Apache-2.0, taken under MIT), Copyright (c) Sean McArthur. Not a
+    dependency: KBAnkiKit's `UnicaseFold.swift` is a table generated from the crate's
+    `src/unicode/map.rs` by `Tools/generate-unicase-fold.sh`, so Anki's collation order is
+    reproduced exactly. The crate built that table from the Unicode Character Database's
+    case folding data, Copyright (c) Unicode, Inc., under the Unicode License.
+    https://github.com/seanmonstar/unicase
+
+BSD-3-Clause:
+
+  - zstd (Zstandard), Copyright (c) Meta Platforms, Inc. and affiliates. Used by KBAnkiKit
+    to read zstd-compressed Anki collections. zstd is dual-licensed under BSD-3-Clause and
+    GPLv2; KBKits takes it under BSD-3-Clause.
+    https://github.com/facebook/zstd
 
 Apache License 2.0:
 
@@ -204,14 +220,16 @@ Apache License 2.0:
   - swift-asn1, Copyright 2022 The SwiftASN1 Project. Reached through swift-crypto. Its
     NOTICE is preserved verbatim at `Licenses/swift-asn1-NOTICE.txt`.
     https://github.com/apple/swift-asn1
+  - swift-toolchain-sqlite (Apache-2.0), Copyright (c) Apple Inc. and the Swift project
+    authors. Used by KBAnkiKit on Android and Linux only, where no platform SQLite is
+    exposed. The SQLite amalgamation it vendors is in the public domain.
+    https://github.com/swiftlang/swift-toolchain-sqlite
 
 Resolved transitively through MisakiSwift, and compiled but never executed by anything here:
 
   - mlx-swift (MIT), Copyright (c) 2023 ml-explore.
     https://github.com/ml-explore/mlx-swift
   - MLXUtilsLibrary (Apache-2.0), https://github.com/KristopherGBaker/MLXUtilsLibrary
-  - ZIPFoundation (MIT), Copyright (c) 2017-2026 Thomas Zoechling. Forked at
-    https://github.com/KristopherGBaker/ZIPFoundation
   - swift-numerics (Apache-2.0), https://github.com/apple/swift-numerics
 
 `KBJapaneseKit` takes only the `MisakiJapanese` product, which is the Open JTalk reading path
