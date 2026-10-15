@@ -5,3 +5,6 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# Sparra loop state (contracts, traces, verdicts): local only
+.sparra/
