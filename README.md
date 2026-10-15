@@ -5,6 +5,7 @@ apps.
 
 ## Packages
 
+- **KBAnkiKit**: reading and writing Anki `.apkg` decks: note types, decks, notes, media, and export of new cards.
 - **KBCore**: the shared document, text and reading-position vocabulary every other package speaks.
 - **KBDictionaryKit**: JMdict word lookup and KANJIDIC2 kanji lookup over two bundled read-only databases.
 - **KBJapaneseKit**: the Japanese reading pipeline, from Open JTalk morphology to validated furigana and pitch accent.
@@ -51,7 +52,13 @@ These are blocking, and none of them is a code change inside this repository:
 2. **The two branch pins MisakiSwift itself carries must be tagged too**, for the same reason:
    `MLXUtilsLibrary` and `ZIPFoundation` are pinned to `kits-android` there. Tagging MisakiSwift
    alone leaves the float one level down.
-3. **Decide the MLX graph.** KBJapaneseKit takes only the `MisakiJapanese` product and links no
+3. **KBAnkiKit's ZIPFoundation pin must move to the same tag.** KBAnkiKit declares
+   ZIPFoundation itself, so `Package.swift` pins `https://github.com/KristopherGBaker/ZIPFoundation`
+   to the `kits-android` BRANCH DIRECTLY, not only through MisakiSwift. Tagging the fork must
+   also move that pin in `Package.swift`, character-identical to MisakiSwift's (SwiftPM keys
+   the package on the URL's last path component, so two different requirements on one fork
+   do not resolve).
+4. **Decide the MLX graph.** KBJapaneseKit takes only the `MisakiJapanese` product and links no
    MLX, but SwiftPM still resolves mlx-swift, MLXUtilsLibrary, ZIPFoundation and swift-numerics
-   through the fork. Splitting an MLX-free package out of the fork removes them; until then they
-   are listed in `NOTICE`.
+   through the fork. Splitting an MLX-free package out of the fork removes them (ZIPFoundation
+   excepted, which KBAnkiKit uses itself); until then they are listed in `NOTICE`.
