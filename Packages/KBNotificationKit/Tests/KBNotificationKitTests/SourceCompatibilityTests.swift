@@ -1,6 +1,7 @@
 import Foundation
 import Testing
-@testable import KBNotificationKit
+// A plain import, as an external conformer would have: the defaults below must be public to resolve.
+import KBNotificationKit
 
 /// A conformer written the way an external one would have been before this change: it implements
 /// exactly the members that existed then, and nothing else. It must still compile, which proves
@@ -37,6 +38,10 @@ struct SourceCompatibilityTests {
         // Clearing the delivered set defaults to doing nothing, which is the only honest default:
         // a conformer that knows nothing about delivery cannot clear one.
         await scheduler.clearDelivered()
+        // The switches default to what the authorisation implies, which is what such a caller
+        // assumed, and the delivered set defaults to empty for the same reason as the clear above.
+        #expect(await scheduler.deliverySettings() == NotificationDeliverySettings(assuming: .authorized))
+        #expect(await scheduler.deliveredNotifications().isEmpty)
 
         // The initializer form that existed before this change, with no new arguments supplied.
         let note = LocalNotification(

@@ -142,9 +142,87 @@ public enum NotificationAuthorization: String, Sendable, Hashable, Codable, Case
     }
 }
 
+/// Where one notification switch stands in the system's settings.
+///
+/// A package-owned mirror of `UNNotificationSetting`, kept separate for the same reason as the
+/// other mirrors here: a caller reads what the user allowed without importing UserNotifications.
+public enum NotificationSettingState: String, Sendable, Hashable, Codable, CaseIterable {
+    /// The user has this switch on.
+    case enabled
+    /// The user has turned this switch off, or never granted it.
+    case disabled
+    /// The switch does not apply to this app or this device.
+    case notSupported
+
+    /// Whether the system will honour this part of a notification.
+    public var isEnabled: Bool {
+        self == .enabled
+    }
+}
+
+/// What the user has granted, switch by switch.
+///
+/// `NotificationAuthorization` answers whether anything is delivered at all. The user can still
+/// turn alerts, sounds and the badge off one at a time in Settings while the app stays
+/// `authorized`, so a caller that wants to know whether a sound will play, or whether a number on
+/// the icon will be seen, reads the matching switch here.
+public struct NotificationDeliverySettings: Sendable, Hashable {
+    public var authorization: NotificationAuthorization
+    /// Whether an alert banner is shown.
+    public var alert: NotificationSettingState
+    /// Whether a sound is played.
+    public var sound: NotificationSettingState
+    /// Whether the number on the app icon is set.
+    public var badge: NotificationSettingState
+
+    public init(
+        authorization: NotificationAuthorization,
+        alert: NotificationSettingState,
+        sound: NotificationSettingState,
+        badge: NotificationSettingState
+    ) {
+        self.authorization = authorization
+        self.alert = alert
+        self.sound = sound
+        self.badge = badge
+    }
+
+    /// The settings a caller assumed before the switches could be read: every switch on when the
+    /// authorisation delivers, every switch off when it does not.
+    public init(assuming authorization: NotificationAuthorization) {
+        let state: NotificationSettingState = authorization.allowsDelivery ? .enabled : .disabled
+        self.init(authorization: authorization, alert: state, sound: state, badge: state)
+    }
+}
+
+/// A notification the system has already delivered, still sitting in Notification Centre.
+///
+/// Two moments, because they differ: `notification.deliverAt` is the moment it was scheduled for,
+/// read back exactly as `pendingNotifications()` reads a pending one, and `deliveredAt` is the
+/// moment the system says it actually arrived.
+public struct DeliveredNotification: Sendable, Hashable, Identifiable {
+    public var notification: LocalNotification
+    /// When the system delivered it.
+    public var deliveredAt: Date
+
+    /// The notification's own id, so a delivered copy and a pending one are matched by the same key.
+    public var id: String { notification.id }
+
+    public init(notification: LocalNotification, deliveredAt: Date) {
+        self.notification = notification
+        self.deliveredAt = deliveredAt
+    }
+}
+
 /// Scheduling local notifications.
 public protocol NotificationScheduler: Sendable {
     func authorization() async -> NotificationAuthorization
+
+    /// What the user has granted, switch by switch, alongside the authorisation itself.
+    ///
+    /// An `authorized` app can still have its sound or badge switched off in Settings, so a caller
+    /// that sets either one on every notification reads this first to learn whether it will land.
+    func deliverySettings() async -> NotificationDeliverySettings
 
     /// Prompts, once, for the default authorisation set (alert and sound). Returns what the user
     /// chose; a refusal is an answer, not a failure.
@@ -196,6 +274,14 @@ public protocol NotificationScheduler: Sendable {
     /// scheduled rather than only reconcile ids. A conformer that keeps no record of the full
     /// notifications may return an empty array; the schedulers shipped here return the real set.
     func pendingNotifications() async -> [LocalNotification]
+
+    /// The notifications already delivered and still in Notification Centre, earliest
+    /// `deliveredAt` first.
+    ///
+    /// This only reports: `clearDelivered()` is what removes them, and neither call touches the
+    /// pending set. A caller that clears its delivered stack on coming to the foreground reads
+    /// this first if it wants to say when a reminder arrived.
+    func deliveredNotifications() async -> [DeliveredNotification]
 }
 
 public extension NotificationScheduler {
@@ -220,6 +306,22 @@ public extension NotificationScheduler {
     /// This default exists only so a type conforming to `NotificationScheduler` before this
     /// method existed keeps compiling. The schedulers shipped here override it.
     func pendingNotifications() async -> [LocalNotification] { [] }
+
+    /// Reports every switch as the authorisation implies: all on when it delivers, all off when it
+    /// does not.
+    ///
+    /// This default exists only so a type conforming to `NotificationScheduler` before this
+    /// method existed keeps compiling, and it reports what such a caller assumed. The schedulers
+    /// shipped here override it.
+    func deliverySettings() async -> NotificationDeliverySettings {
+        NotificationDeliverySettings(assuming: await authorization())
+    }
+
+    /// Returns no delivered notifications by default.
+    ///
+    /// This default exists only so a type conforming to `NotificationScheduler` before this
+    /// method existed keeps compiling. The schedulers shipped here override it.
+    func deliveredNotifications() async -> [DeliveredNotification] { [] }
 
     /// Schedules only if the user has already agreed, without prompting.
     ///
