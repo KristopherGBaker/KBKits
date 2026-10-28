@@ -2,74 +2,7 @@
 import Foundation
 import UserNotifications
 
-/// The `UNUserNotificationCenter` operations the scheduler needs.
-///
-/// Named for the role it plays, the notification centre, not for the fact that it is a seam.
-/// It exists so the scheduler's real behaviour, the identifiers it puts on requests, the way
-/// it maps a centre failure to a `NotificationSchedulingError`, and the way it maps a
-/// `UNAuthorizationStatus` to a `NotificationAuthorization`, can be exercised without a device
-/// or a permission prompt. `SystemNotificationCentre` is the production conformance; a test
-/// substitutes its own.
-protocol NotificationCentre: Sendable {
-    func authorizationStatus() async -> UNAuthorizationStatus
-    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
-    // `UNNotificationRequest` is not `Sendable`, so it crosses to a conformance that may be an
-    // actor as `sending`: the scheduler builds a fresh request and hands off sole ownership.
-    func add(_ request: sending UNNotificationRequest) async throws
-    func removePending(withIdentifiers ids: [String]) async
-    func removeDelivered(withIdentifiers ids: [String]) async
-    func removeAllDelivered() async
-    func removeAllPending() async
-    func pendingIdentifiers() async -> [String]
-    /// The pending notifications, reconstructed as the package's own value type. Returning
-    /// `LocalNotification` rather than `UNNotificationRequest` keeps the seam `Sendable`: the
-    /// request type is not, and the inverse mapping is the scheduler's, so a conformance runs it
-    /// through `UserNotificationScheduler.notification(from:)`.
-    func pendingNotifications() async -> [LocalNotification]
-}
-
-/// The production notification centre: a thin pass-through to `UNUserNotificationCenter`.
-struct SystemNotificationCentre: NotificationCentre {
-    private var center: UNUserNotificationCenter { .current() }
-
-    func authorizationStatus() async -> UNAuthorizationStatus {
-        await center.notificationSettings().authorizationStatus
-    }
-
-    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool {
-        try await center.requestAuthorization(options: options)
-    }
-
-    func add(_ request: sending UNNotificationRequest) async throws {
-        try await center.add(request)
-    }
-
-    func removePending(withIdentifiers ids: [String]) async {
-        center.removePendingNotificationRequests(withIdentifiers: ids)
-    }
-
-    func removeDelivered(withIdentifiers ids: [String]) async {
-        center.removeDeliveredNotifications(withIdentifiers: ids)
-    }
-
-    func removeAllDelivered() async {
-        center.removeAllDeliveredNotifications()
-    }
-
-    func removeAllPending() async {
-        center.removeAllPendingNotificationRequests()
-    }
-
-    func pendingIdentifiers() async -> [String] {
-        await center.pendingNotificationRequests().map(\.identifier)
-    }
-
-    func pendingNotifications() async -> [LocalNotification] {
-        await center.pendingNotificationRequests().map(UserNotificationScheduler.notification(from:))
-    }
-}
-
-/// The real thing.
+/// The real thing. The notification centre it drives is `NotificationCentre`, next door.
 public struct UserNotificationScheduler: NotificationScheduler {
     private let centre: any NotificationCentre
 
@@ -96,6 +29,29 @@ public struct UserNotificationScheduler: NotificationScheduler {
         case .notDetermined: .notDetermined
         case .ephemeral: .authorized
         @unknown default: .notDetermined
+        }
+    }
+
+    public func deliverySettings() async -> NotificationDeliverySettings {
+        // One read, so the status and the switches describe the same moment in Settings.
+        let settings = await centre.notificationSettings()
+        return NotificationDeliverySettings(
+            authorization: Self.authorization(from: settings.authorizationStatus),
+            alert: Self.settingState(from: settings.alert),
+            sound: Self.settingState(from: settings.sound),
+            badge: Self.settingState(from: settings.badge)
+        )
+    }
+
+    /// Maps one system switch onto ours, each case to its own. A case this build does not know is
+    /// reported `notSupported`, never `enabled`: a caller acting on a switch it cannot read should
+    /// assume the part does not land rather than that it does.
+    static func settingState(from setting: UNNotificationSetting) -> NotificationSettingState {
+        switch setting {
+        case .enabled: .enabled
+        case .disabled: .disabled
+        case .notSupported: .notSupported
+        @unknown default: .notSupported
         }
     }
 
@@ -316,6 +272,19 @@ public struct UserNotificationScheduler: NotificationScheduler {
         )
     }
 
+    /// Reads a delivered notification back: the request as `notification(from:)` reads a pending
+    /// one, so the reserved stamp is stripped and `deliverAt` is the moment it was scheduled for,
+    /// plus the system's own record of when it arrived.
+    static func delivered(from notification: UNNotification) -> DeliveredNotification {
+        delivered(request: notification.request, deliveredAt: notification.date)
+    }
+
+    /// The body of `delivered(from:)`, taking the request and date apart because `UNNotification`
+    /// cannot be constructed outside the system and a test still needs to reach this mapping.
+    static func delivered(request: UNNotificationRequest, deliveredAt: Date) -> DeliveredNotification {
+        DeliveredNotification(notification: notification(from: request), deliveredAt: deliveredAt)
+    }
+
     public func cancel(id: String) async {
         await centre.removePending(withIdentifiers: [id])
         // Delivered ones too: a rest alert still sitting in Notification Centre after the next
@@ -337,6 +306,11 @@ public struct UserNotificationScheduler: NotificationScheduler {
 
     public func pendingNotifications() async -> [LocalNotification] {
         await centre.pendingNotifications()
+    }
+
+    public func deliveredNotifications() async -> [DeliveredNotification] {
+        // Sorted here rather than trusted from the centre, which promises no order.
+        await centre.deliveredNotifications().sorted { $0.deliveredAt < $1.deliveredAt }
     }
 }
 #endif

@@ -159,3 +159,146 @@ struct SchedulerTests {
         #expect(note.deliveryAnchor == .interval)
     }
 }
+
+/// The per-switch settings and the delivered set, on the value types and the stub. A suite of its
+/// own so neither type outgrows the house body-length limit.
+@Suite("Delivery settings and the delivered set")
+struct DeliveryTests {
+    @Test(
+        "Assuming an authorisation turns every switch on only when it delivers",
+        arguments: NotificationAuthorization.allCases
+    )
+    func assumingAuthorization(_ authorization: NotificationAuthorization) {
+        let settings = NotificationDeliverySettings(assuming: authorization)
+        let expected: NotificationSettingState = authorization.allowsDelivery ? .enabled : .disabled
+        #expect(settings.authorization == authorization)
+        #expect(settings.alert == expected)
+        #expect(settings.sound == expected)
+        #expect(settings.badge == expected)
+    }
+
+    @Test("Only an allowed authorisation is assumed to enable the switches")
+    func assumingNamedCases() {
+        // Spelled out per case as well, so a change to `allowsDelivery` cannot carry the test above
+        // along with it unnoticed.
+        for allowed in [NotificationAuthorization.authorized, .provisional] {
+            let settings = NotificationDeliverySettings(assuming: allowed)
+            #expect([settings.alert, settings.sound, settings.badge] == [.enabled, .enabled, .enabled])
+        }
+        for refused in [NotificationAuthorization.denied, .notDetermined, .unavailable] {
+            let settings = NotificationDeliverySettings(assuming: refused)
+            #expect([settings.alert, settings.sound, settings.badge] == [.disabled, .disabled, .disabled])
+        }
+    }
+
+    @Test("Only an enabled switch is enabled")
+    func isEnabled() {
+        #expect(NotificationSettingState.enabled.isEnabled)
+        #expect(NotificationSettingState.disabled.isEnabled == false)
+        #expect(NotificationSettingState.notSupported.isEnabled == false)
+    }
+
+    @Test("The stub's switches follow its status until they are set, then stay set")
+    func stubSwitches() async {
+        let denied = StubNotificationScheduler(status: .denied)
+        #expect(await denied.deliverySettings() == NotificationDeliverySettings(assuming: .denied))
+
+        let fresh = StubNotificationScheduler(status: .notDetermined)
+        await fresh.requestAuthorization()
+        #expect(await fresh.deliverySettings() == NotificationDeliverySettings(assuming: .authorized))
+
+        let scheduler = StubNotificationScheduler()
+        await scheduler.setStatus(.denied)
+        #expect(await scheduler.deliverySettings() == NotificationDeliverySettings(assuming: .denied))
+        await scheduler.setStatus(.provisional)
+        #expect(await scheduler.deliverySettings() == NotificationDeliverySettings(assuming: .provisional))
+
+        await scheduler.setSwitches(alert: .enabled, sound: .disabled, badge: .notSupported)
+        #expect(await scheduler.authorization() == .provisional)
+        #expect(await scheduler.deliverySettings() == NotificationDeliverySettings(
+            authorization: .provisional, alert: .enabled, sound: .disabled, badge: .notSupported
+        ))
+
+        // A later status change is a different fact from a switch the user turned off.
+        await scheduler.setStatus(.denied)
+        #expect(await scheduler.deliverySettings() == NotificationDeliverySettings(
+            authorization: .denied, alert: .enabled, sound: .disabled, badge: .notSupported
+        ))
+    }
+
+    @Test("Delivering moves a pending notification into the delivered set, and nothing else does")
+    func stubDeliver() async throws {
+        let scheduler = StubNotificationScheduler()
+        await scheduler.schedule(notification(id: "a"))
+        await scheduler.schedule(notification(id: "b"))
+        let scheduledA = try #require(await scheduler.pending["a"])
+        let moment = Date()
+
+        #expect(await scheduler.deliver(id: "a", at: moment))
+        #expect(await scheduler.pendingIdentifiers() == ["b"])
+        #expect(await scheduler.deliveredNotifications() == [
+            DeliveredNotification(notification: scheduledA, deliveredAt: moment)
+        ])
+
+        // Nothing pending under the id: no change, whether it never existed or already fired.
+        for id in ["missing", "a"] {
+            #expect(await scheduler.deliver(id: id, at: moment) == false)
+            #expect(await scheduler.pendingIdentifiers() == ["b"])
+            #expect(await scheduler.delivered.map(\.id) == ["a"])
+        }
+
+        await scheduler.deliver(id: "b", at: moment.addingTimeInterval(-60))
+        #expect(await scheduler.deliveredNotifications().map(\.id) == ["b", "a"])
+    }
+
+    @Test("Delivering an id again replaces its earlier delivered copy")
+    func stubDeliverReplaces() async throws {
+        let scheduler = StubNotificationScheduler()
+        let first = Date()
+        let second = first.addingTimeInterval(120)
+        await scheduler.schedule(notification(id: "a", title: "v1"))
+        await scheduler.deliver(id: "a", at: first)
+        await scheduler.schedule(notification(id: "a", title: "v2"))
+        await scheduler.deliver(id: "a", at: second)
+
+        let delivered = await scheduler.delivered
+        #expect(delivered.count == 1)
+        #expect(delivered.first?.notification.title == "v2")
+        #expect(delivered.first?.deliveredAt == second)
+    }
+
+    @Test("Clearing the delivered set empties it, counts the call and keeps the schedule")
+    func stubClearDelivered() async throws {
+        let scheduler = StubNotificationScheduler()
+        await scheduler.schedule(notification(id: "a"))
+        await scheduler.schedule(notification(id: "b"))
+        await scheduler.deliver(id: "a", at: Date())
+        #expect(await scheduler.delivered.isEmpty == false)
+        let clearsBefore = await scheduler.deliveredClears
+
+        await scheduler.clearDelivered()
+
+        #expect(await scheduler.delivered.isEmpty)
+        #expect(await scheduler.deliveredNotifications().isEmpty)
+        #expect(await scheduler.deliveredClears == clearsBefore + 1)
+        #expect(await scheduler.pendingIdentifiers() == ["b"])
+    }
+
+    @Test("Cancelling an id takes its delivered copy; cancelling everything does not")
+    func stubCancelDelivered() async throws {
+        let scheduler = StubNotificationScheduler()
+        for id in ["a", "b"] {
+            await scheduler.schedule(notification(id: id))
+            await scheduler.deliver(id: id, at: Date())
+        }
+
+        await scheduler.cancel(id: "a")
+        #expect(await scheduler.delivered.map(\.id) == ["b"])
+        #expect(await scheduler.cancelled == ["a"])
+
+        await scheduler.schedule(notification(id: "c"))
+        await scheduler.cancelAll()
+        #expect(await scheduler.delivered.map(\.id) == ["b"])
+        #expect(await scheduler.pendingIdentifiers().isEmpty)
+    }
+}

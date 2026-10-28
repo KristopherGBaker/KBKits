@@ -13,7 +13,9 @@ the notification centre already holds.
   `pendingIdentifiers`, `pendingNotifications`, plus authorization. `requestAuthorization()` asks for the default set;
   `requestAuthorization(options:)` lets the caller choose. `scheduleIfAllowed` is the derived
   convenience. `pendingIdentifiers` is the cheap reconcile call; `pendingNotifications` returns the
-  full notifications for a caller that wants to SHOW what is scheduled.
+  full notifications for a caller that wants to SHOW what is scheduled. `deliverySettings` reports
+  the alert, sound and badge switches alongside the authorisation; `deliveredNotifications` reports
+  what has already arrived and is still in Notification Centre, earliest first.
 - `LocalNotification` - id, title, body, delivery date, thread, sound, badge, user info,
   interruption level, and delivery anchor.
 - `NotificationInterruptionLevel` - how urgently to surface a notification (`passive`, `active`,
@@ -23,6 +25,13 @@ the notification centre already holds.
 - `NotificationAuthorizationOption` - the categories a caller can request (`alert`, `sound`,
   `badge`); `defaultAuthorizationOptions` is `[.alert, .sound]`.
 - `NotificationAuthorization` - including `provisional`, the quiet grant.
+- `NotificationSettingState` - where one switch stands (`enabled`, `disabled`, `notSupported`); a
+  package-owned mirror of `UNNotificationSetting`. `isEnabled` is true for `enabled` alone.
+- `NotificationDeliverySettings` - the authorisation plus the `alert`, `sound` and `badge`
+  switches, which a user can turn off one at a time while the app stays `authorized`.
+  `init(assuming:)` builds what a caller assumed before the switches could be read.
+- `DeliveredNotification` - a delivered notification: the `LocalNotification` it was, whose
+  `deliverAt` is the moment it was scheduled for, and `deliveredAt`, the moment it arrived.
 - `NotificationSchedulingError` - thrown by `schedule` when the notification centre refuses a
   request, naming the id that failed and the centre's reason.
 - `UserNotificationScheduler` - the real one, behind `canImport(UserNotifications)`.
@@ -63,3 +72,11 @@ the notification centre already holds.
 - **The reserved key never eats a caller's value.** A caller that happens to use the adapter's own
   key gets its value back unchanged: the stamp carries the caller's value along with the delivery
   moment and puts it back on readback. The round-trip guarantee has no asterisk.
+- **An unknown switch is never reported enabled.** A switch state the package does not know reads
+  as `notSupported`, so a caller deciding whether a sound will play or a badge will be seen
+  assumes it will not, rather than that it will.
+- **`deliveredNotifications` reports, `clearDelivered` removes, and neither touches pending.** An
+  app that clears its delivered stack on coming to the foreground reads the set first if it wants
+  to say when a reminder arrived; the reminders still lined up are untouched either way. A
+  delivered notification reads back like a pending one, reserved stamp stripped and the caller's
+  user info intact, with the system's arrival time beside the moment it was scheduled for.
