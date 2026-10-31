@@ -1,0 +1,76 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@%@" : {
+      "comment" : "Joins the `Text` pieces built from the `MarkdownInline`s. Not user-facing text.",
+      "shouldTranslate" : false
+    },
+    "Completed" : {
+      "comment" : "VoiceOver label of a ticked task item's checkbox.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "完了"
+          }
+        }
+      }
+    },
+    "Edit" : {
+      "comment" : "Editor mode: the Markdown source only.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集"
+          }
+        }
+      }
+    },
+    "Editor mode" : {
+      "comment" : "Label of the control choosing edit, preview or split.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "エディタモード"
+          }
+        }
+      }
+    },
+    "Not completed" : {
+      "comment" : "VoiceOver label of an unticked task item's checkbox.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未完了"
+          }
+        }
+      }
+    },
+    "Preview" : {
+      "comment" : "Editor mode: the rendered document only.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プレビュー"
+          }
+        }
+      }
+    },
+    "Split" : {
+      "comment" : "Editor mode: source and rendered document side by side.",
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分割"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.1"
+}
