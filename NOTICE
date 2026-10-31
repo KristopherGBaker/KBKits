@@ -225,6 +225,20 @@ Apache License 2.0:
     exposed. The SQLite amalgamation it vendors is in the public domain.
     https://github.com/swiftlang/swift-toolchain-sqlite
 
+The standalone packages (each its own manifest under `Packages/`, see README.md) resolve only
+these, all Apache License 2.0 with the Runtime Library Exception:
+
+  - swift-syntax, Copyright (c) Apple Inc. and the Swift project authors. KBLLM's macros
+    (`KBLLMMacrosPlugin`) only; it is a compile-time dependency and is not linked into an app.
+    https://github.com/swiftlang/swift-syntax
+  - swift-markdown, Copyright (c) Apple Inc. and the Swift project authors. KBMarkdownKit.
+    It brings swift-cmark (BSD-2-Clause, Copyright (c) John MacFarlane, and the cmark-gfm
+    authors), https://github.com/swiftlang/swift-cmark.
+    https://github.com/swiftlang/swift-markdown
+  - swift-docc-plugin, Copyright (c) Apple Inc. and the Swift project authors. Resolved only
+    when `KBLLM_BUILD_DOCS` is set, to build KBLLM's documentation.
+    https://github.com/swiftlang/swift-docc-plugin
+
 Resolved transitively through MisakiSwift, and compiled but never executed by anything here:
 
   - mlx-swift (MIT), Copyright (c) 2023 ml-explore.

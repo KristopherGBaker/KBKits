@@ -13,7 +13,23 @@ apps.
 - **KBNotificationKit**: a testable local-notification scheduling seam for Apple apps.
 - **KBReadingKit**: the SwiftUI-free reading pipeline: tokenizing, the furigana rules, and the value model a renderer draws.
 
-Each product is independently linkable from the package:
+Three more are standalone packages, each with its own `Package.swift` under `Packages/<Name>/`, so
+an app that needs only them does not resolve the root package's dependencies (GRDB, zstd,
+MisakiSwift and the rest):
+
+- **KBLLM** (`Packages/KBLLM`): a provider-neutral LLM client: value types and protocols, a
+  `@Tool`/`@Schema` macro pair, an agent session loop with middleware, offline test fakes, and
+  adapters for Anthropic, OpenAI-compatible servers, URLSession and Apple's on-device model.
+- **KBMCPServer** (`Packages/KBMCPServer`): host a tool-only MCP server from an app, over
+  loopback Streamable HTTP or stdio. No dependencies.
+- **KBMarkdownKit** (`Packages/KBMarkdownKit`): a Sendable Markdown block model with source
+  ranges (`KBMarkdown`) and a SwiftUI renderer and source editor on top of it (`KBMarkdownUI`).
+
+Depend on one by path from a checkout beside your app (`.package(path:
+"../KBKits/Packages/KBLLM")`); run `swift test` inside its folder. `Tools/KBLLMSmoke` is a
+by-hand live check of KBLLM against a real server, outside every test suite.
+
+Each product of the root package is independently linkable from the package:
 
 ```swift
 dependencies: [
