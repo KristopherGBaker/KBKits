@@ -21,6 +21,18 @@ import Testing
         #expect(RetryAfter.seconds(from: "Wed, 21 Oct 2026 07:00:00 GMT", now: now) == 0)
     }
 
+    @Test func aHugeValueIsClampedToTheMaximumNeverInfiniteOrNegative() throws {
+        for value in ["100000000000000000", String(repeating: "9", count: 400), "Fri, 31 Dec 9999 23:59:59 GMT"] {
+            let seconds = try #require(RetryAfter.seconds(from: value, now: now), "\(value.prefix(20))")
+            #expect(seconds == RetryAfter.maximumSeconds && seconds.isFinite, "\(value.prefix(20))")
+            // Safe to turn into whole milliseconds, which an unclamped 1e17 s would overflow.
+            #expect(Int64(exactly: (seconds * 1000).rounded()) != nil)
+        }
+        #expect(RetryAfter.seconds(from: "0", now: now) == 0)
+        #expect(RetryAfter.seconds(from: "Thu, 01 Jan 1970 00:00:00 GMT", now: now) == 0, "a past date is no wait")
+        #expect(RetryAfter.seconds(from: "-100000000000000000", now: now) == nil, "a negative is not delay-seconds")
+    }
+
     @Test func anythingElseIsNil() {
         for value in ["", "soon", "-5", "1.5", "+3", "Wed, 21 Oct 2026"] {
             #expect(RetryAfter.seconds(from: value, now: now) == nil, "\(value)")

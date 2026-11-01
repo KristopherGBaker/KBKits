@@ -8,6 +8,11 @@ import Foundation
 /// (RFC 850 and asctime) are read too. Anything else is nil, so a caller falls back to its own
 /// backoff rather than waiting on a guess.
 public enum RetryAfter {
+    /// The longest wait a header is read as: one day. A valid but absurd value ("100000000000000000", or a date centuries
+    /// away) is clamped to it, so a caller converting the wait to an integer count of milliseconds or nanoseconds can
+    /// never overflow, and every result is finite.
+    public static let maximumSeconds: TimeInterval = 86_400
+
     /// The wait `value` asks for, in seconds, read at `now`; nil when it is neither form. `now`
     /// is the caller's, never read here: the core keeps off the wall clock, and a test passes a
     /// fixed one.
@@ -16,7 +21,9 @@ public enum RetryAfter {
         guard !trimmed.isEmpty else { return nil }
         // delay-seconds is 1*DIGIT: no sign, no fraction.
         if trimmed.allSatisfy(\.isASCII), trimmed.allSatisfy(\.isNumber) {
-            return TimeInterval(trimmed)
+            // A digit string too long for a Double reads as infinity: clamped like any other huge value.
+            guard let seconds = TimeInterval(trimmed), !seconds.isNaN else { return nil }
+            return clamp(seconds)
         }
         for format in dateFormats {
             let formatter = DateFormatter()
@@ -24,10 +31,15 @@ public enum RetryAfter {
             formatter.timeZone = TimeZone(identifier: "GMT")
             formatter.dateFormat = format
             if let date = formatter.date(from: trimmed) {
-                return max(0, date.timeIntervalSince(now))
+                return clamp(date.timeIntervalSince(now))
             }
         }
         return nil
+    }
+
+    /// `seconds` within `0...maximumSeconds` (a past date is no wait); NaN is never passed in.
+    private static func clamp(_ seconds: TimeInterval) -> TimeInterval {
+        min(max(0, seconds), maximumSeconds)
     }
 
     /// IMF-fixdate, then the obsolete RFC 850 and asctime forms.
