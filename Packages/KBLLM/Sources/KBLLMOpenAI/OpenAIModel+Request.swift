@@ -6,7 +6,7 @@ import KBLLM
 // the type past the house type-body limit.
 extension OpenAIModel {
 
-    // Six parameters on a builder with one call site, each a distinct value captured
+    // Eight parameters on a builder with one call site, each a distinct value captured
     // out of the struct before the escaping closure. Bundling two of them into a type that
     // exists only to satisfy a count would add indirection and explain nothing.
     // swiftlint:disable:next function_parameter_count
@@ -17,7 +17,8 @@ extension OpenAIModel {
         endpoint: String,
         extraHeaders: [String: String],
         reasoningEffort: ReasoningEffort?,
-        outputTokenField: OutputTokenField
+        outputTokenField: OutputTokenField,
+        promptCacheKey: String? = nil
     ) throws -> HTTPRequestSpec {
         var body: [String: Any] = [
             "model": model,
@@ -85,6 +86,8 @@ extension OpenAIModel {
         }
         if !isGreedy, let topP = options.topP { body["top_p"] = topP }
         if let reasoningEffort { body["reasoning_effort"] = reasoningEffort.rawValue }
+        // Only when the caller asked: an absent key is the body this adapter always sent.
+        if let promptCacheKey { body["prompt_cache_key"] = promptCacheKey }
         body["messages"] = try request.messages.flatMap(messageJSON)
         let data = try serialize(body)
         // The caller's headers go in FIRST so the adapter's own overwrite them on collision:

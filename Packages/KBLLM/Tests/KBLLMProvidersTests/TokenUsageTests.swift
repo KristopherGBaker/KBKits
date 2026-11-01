@@ -35,8 +35,8 @@ import Testing
         let usage = try #require(usageEvents(result.events).first)
         #expect(usage.inputTokens == 13)
         #expect(usage.outputTokens == 21)
-        // OpenAI bills cached prompt tokens but has no notion of a cache WRITE, so that field
-        // stays 0 rather than borrowing another provider's meaning.
+        // A model before GPT-5.6 reports no `cache_write_tokens` (its writes are not billed),
+        // so that field stays 0 rather than borrowing another provider's meaning.
         #expect(usage.cacheReadTokens == 8)
         #expect(usage.cacheWriteTokens == 0)
     }

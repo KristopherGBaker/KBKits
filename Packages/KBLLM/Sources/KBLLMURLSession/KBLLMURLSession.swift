@@ -22,11 +22,32 @@ public final class KBLLMURLSession: HTTPTransport, @unchecked Sendable {
     /// Internal rather than private so the delegate-driven streaming path, which lives in
     /// its own file, can build a session from the same configuration.
     let configuration: URLSessionConfiguration
+    /// Whether a non-success status with a `Retry-After` header is thrown as
+    /// `KBLLMError.httpStatusRetryAfter` (see the initializer).
+    let reportsRetryAfter: Bool
 
     /// - Parameter configuration: the session configuration. The default is `.default`; a
     ///   test passes one whose `protocolClasses` intercept every request so no socket opens.
-    public init(configuration: URLSessionConfiguration = .default) {
+    /// - Parameter reportsRetryAfter: when true, a non-success status whose response carries a
+    ///   readable `Retry-After` header (`RetryAfter.seconds(from:now:)`) is thrown as
+    ///   `KBLLMError.httpStatusRetryAfter(code:message:retryAfter:)`, for every adapter on this
+    ///   transport. Off by default, so a caller that matches `.httpStatus` sees exactly the
+    ///   errors it always did; a caller that turns it on handles both cases (or reads
+    ///   `KBLLMError.httpStatusCode` and `retryAfter`).
+    public init(configuration: URLSessionConfiguration = .default, reportsRetryAfter: Bool = false) {
         self.configuration = configuration
+        self.reportsRetryAfter = reportsRetryAfter
+    }
+
+    /// The error a non-success status is thrown as: `.httpStatusRetryAfter` when asked for and
+    /// the response's `Retry-After` reads, else `.httpStatus`. Shared by both streaming paths.
+    static func statusError(
+        code: Int, message: String, retryAfterHeader: String?, reportsRetryAfter: Bool, now: Date = Date()
+    ) -> KBLLMError {
+        if reportsRetryAfter, let header = retryAfterHeader, let seconds = RetryAfter.seconds(from: header, now: now) {
+            return .httpStatusRetryAfter(code: code, message: message, retryAfter: seconds)
+        }
+        return .httpStatus(code: code, message: message)
     }
 
     public func send(_ request: HTTPRequestSpec) async throws -> HTTPResponseSpec {
@@ -52,6 +73,7 @@ public final class KBLLMURLSession: HTTPTransport, @unchecked Sendable {
     #if canImport(Darwin)
     private func openBytesViaAsyncBytes(_ request: HTTPRequestSpec) -> AsyncThrowingStream<UInt8, any Error> {
         let configuration = self.configuration
+        let reportsRetryAfter = self.reportsRetryAfter
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
@@ -65,9 +87,11 @@ public final class KBLLMURLSession: HTTPTransport, @unchecked Sendable {
                         // Non-success obligation: drain the error body for its message and
                         // throw `.httpStatus` into the stream. The body is NEVER yielded as
                         // content, so an adapter can never mistake it for a model frame.
-                        throw KBLLMError.httpStatus(
+                        throw Self.statusError(
                             code: http.statusCode,
-                            message: try await Self.drainMessage(bytes)
+                            message: try await Self.drainMessage(bytes),
+                            retryAfterHeader: http.value(forHTTPHeaderField: "Retry-After"),
+                            reportsRetryAfter: reportsRetryAfter
                         )
                     }
                     // Incremental by construction: each byte is yielded as `URLSession`

@@ -20,6 +20,7 @@ public struct OpenAIModel: LanguageModel {
     private let extraHeaders: [String: String]
     private let reasoningEffort: ReasoningEffort?
     private let outputTokenField: OutputTokenField
+    private let promptCacheKey: String?
     private let transport: any HTTPTransport
     private let credentials: any CredentialStore
 
@@ -78,6 +79,13 @@ public struct OpenAIModel: LanguageModel {
     ///   Defaults to `max_tokens`, the name this adapter has always sent. Set it to
     ///   `.maxCompletionTokens` for OpenAI's newer models, which reject the old name with a
     ///   400 rather than ignoring it.
+    /// - Parameter promptCacheKey: sent as `prompt_cache_key` when set (and not empty), omitted
+    ///   when nil, which is the default, so a caller that never sets it sends exactly the body it
+    ///   always did. OpenAI caches prompts automatically; the key routes requests that share a
+    ///   prefix to the same cache, which raises the hit rate on the models before GPT-5.6, and
+    ///   from GPT-5.6 it groups their cache accounting. Pass one stable value per conversation,
+    ///   never anything personal (a name, a key, the content). An OpenAI-compatible server that
+    ///   does not know the field may refuse it, so leave it nil there.
     public init(
         model: String,
         credentialKey: String,
@@ -85,6 +93,7 @@ public struct OpenAIModel: LanguageModel {
         extraHeaders: [String: String] = [:],
         reasoningEffort: ReasoningEffort? = nil,
         outputTokenField: OutputTokenField = .maxTokens,
+        promptCacheKey: String? = nil,
         transport: any HTTPTransport,
         credentials: any CredentialStore
     ) {
@@ -94,6 +103,7 @@ public struct OpenAIModel: LanguageModel {
         self.extraHeaders = extraHeaders
         self.reasoningEffort = reasoningEffort
         self.outputTokenField = outputTokenField
+        self.promptCacheKey = promptCacheKey.flatMap { $0.isEmpty ? nil : $0 }
         self.transport = transport
         self.credentials = credentials
     }
@@ -105,6 +115,7 @@ public struct OpenAIModel: LanguageModel {
         let extraHeaders = self.extraHeaders
         let reasoningEffort = self.reasoningEffort
         let outputTokenField = self.outputTokenField
+        let promptCacheKey = self.promptCacheKey
         let transport = self.transport
         let credentials = self.credentials
         return AsyncThrowingStream { continuation in
@@ -142,7 +153,8 @@ public struct OpenAIModel: LanguageModel {
                         endpoint: endpoint,
                         extraHeaders: extraHeaders,
                         reasoningEffort: reasoningEffort,
-                        outputTokenField: outputTokenField
+                        outputTokenField: outputTokenField,
+                        promptCacheKey: promptCacheKey
                     )
 
                     // Throw sites 3 (transport reachability), 4 (`.httpStatus` from the

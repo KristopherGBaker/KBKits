@@ -21,6 +21,7 @@ extension KBLLMURLSession {
     /// thrown `KBLLMError.httpStatus`.
     func openBytesViaDelegate(_ request: HTTPRequestSpec) -> AsyncThrowingStream<UInt8, any Error> {
         let configuration = self.configuration
+        let reportsRetryAfter = self.reportsRetryAfter
         return AsyncThrowingStream { continuation in
             let urlRequest: URLRequest
             do {
@@ -29,7 +30,9 @@ extension KBLLMURLSession {
                 continuation.finish(throwing: error)
                 return
             }
-            let delegate = ByteStreamDelegate(continuation: continuation, url: request.url)
+            let delegate = ByteStreamDelegate(
+                continuation: continuation, url: request.url, reportsRetryAfter: reportsRetryAfter
+            )
             // A delegate session retains its delegate until the task completes, so the
             // delegate is not captured here; `finishTasksAndInvalidate` releases it.
             let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
@@ -52,16 +55,19 @@ final class ByteStreamDelegate: NSObject, URLSessionDataDelegate, @unchecked Sen
     private let continuation: AsyncThrowingStream<UInt8, any Error>.Continuation
     private let url: String
     private let lock = NSLock()
+    private let reportsRetryAfter: Bool
     private var status: Int?
+    private var retryAfterHeader: String?
     private var errorBody: [UInt8] = []
 
     /// Matches the `AsyncBytes` path's bound, so a pathological error body cannot buffer
     /// without limit on either platform.
     private static let errorBodyLimit = 4096
 
-    init(continuation: AsyncThrowingStream<UInt8, any Error>.Continuation, url: String) {
+    init(continuation: AsyncThrowingStream<UInt8, any Error>.Continuation, url: String, reportsRetryAfter: Bool = false) {
         self.continuation = continuation
         self.url = url
+        self.reportsRetryAfter = reportsRetryAfter
     }
 
     func urlSession(
@@ -78,6 +84,7 @@ final class ByteStreamDelegate: NSObject, URLSessionDataDelegate, @unchecked Sen
         }
         lock.lock()
         status = http.statusCode
+        retryAfterHeader = http.value(forHTTPHeaderField: "Retry-After")
         lock.unlock()
         completionHandler(.allow)
     }
@@ -118,6 +125,7 @@ final class ByteStreamDelegate: NSObject, URLSessionDataDelegate, @unchecked Sen
         lock.lock()
         let code = status
         let body = errorBody
+        let retryAfter = retryAfterHeader
         lock.unlock()
 
         guard let code else {
@@ -128,8 +136,9 @@ final class ByteStreamDelegate: NSObject, URLSessionDataDelegate, @unchecked Sen
         if (200...299).contains(code) {
             continuation.finish()
         } else {
-            continuation.finish(throwing: KBLLMError.httpStatus(
-                code: code, message: String(bytes: body, encoding: .utf8) ?? ""))
+            continuation.finish(throwing: KBLLMURLSession.statusError(
+                code: code, message: String(bytes: body, encoding: .utf8) ?? "",
+                retryAfterHeader: retryAfter, reportsRetryAfter: reportsRetryAfter))
         }
     }
 }

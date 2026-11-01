@@ -16,6 +16,10 @@ public extension ToolResult {
             fields = ["kind": "transport", "url": url, "underlying": underlying]
         case .httpStatus(let code, let message):
             fields = ["kind": "httpStatus", "code": String(code), "message": message]
+        case .httpStatusRetryAfter(let code, let message, let retryAfter):
+            fields = [
+                "kind": "httpStatus", "code": String(code), "message": message, "retryAfter": String(retryAfter)
+            ]
         case .missingCredential(let key):
             fields = ["kind": "missingCredential", "key": key]
         case .decoding(let expected, let fragment):

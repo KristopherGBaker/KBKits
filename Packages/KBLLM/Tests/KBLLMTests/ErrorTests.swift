@@ -26,6 +26,7 @@ private struct FailingModel: LanguageModel {
         let samples: [KBLLMError] = [
             .transport(url: "https://api.example.com/v1", underlying: "connection reset"),
             .httpStatus(code: 429, message: "rate limited"),
+            .httpStatusRetryAfter(code: 429, message: "rate limited", retryAfter: 2),
             .missingCredential(key: "OPENAI_API_KEY"),
             .decoding(expected: "an SSE data frame", fragment: "{partial"),
             .unknownTool(name: "search"),
@@ -45,6 +46,8 @@ private struct FailingModel: LanguageModel {
             !url.isEmpty && !underlying.isEmpty
         case .httpStatus(let code, let message):
             code != 0 && !message.isEmpty
+        case .httpStatusRetryAfter(let code, let message, let retryAfter):
+            code != 0 && !message.isEmpty && retryAfter >= 0
         case .missingCredential(let key):
             !key.isEmpty
         case .decoding(let expected, let fragment):

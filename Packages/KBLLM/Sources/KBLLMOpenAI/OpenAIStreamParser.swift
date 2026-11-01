@@ -45,11 +45,16 @@ struct OpenAIResponseParser {
         // guard below rather than after it.
         if let usage = decoded.usage {
             pendingUsage = TokenUsage(
+                // `prompt_tokens` as reported: it INCLUDES the cache reads and writes below
+                // (OpenAI's own example bills `input - cached - writes` as ordinary input), so a
+                // caller pricing them takes both out of it rather than adding them again.
                 inputTokens: usage.promptTokens ?? 0,
                 outputTokens: usage.completionTokens ?? 0,
-                // OpenAI reports cached prompt tokens as a nested detail. It has no notion of a
-                // cache WRITE (caching is automatic and unbilled), so that stays 0.
+                // Both are nested details of `prompt_tokens`. `cached_tokens` counts billed reads
+                // only; `cache_write_tokens` is reported by the models that bill writes (GPT-5.6
+                // and later, at 1.25x input) and absent before them, which reads as 0 writes.
                 cacheReadTokens: usage.promptTokensDetails?.cachedTokens ?? 0,
+                cacheWriteTokens: usage.promptTokensDetails?.cacheWriteTokens ?? 0,
                 reportedCostUSD: usage.cost
             )
         }
@@ -152,6 +157,8 @@ struct OpenAIFrame: Decodable {
     /// limit; on the wire it is `usage.prompt_tokens_details`.
     struct PromptTokensDetails: Decodable {
         let cachedTokens: Int?
+        /// `cache_write_tokens`: "the unadjusted number of prompt tokens written to cache".
+        let cacheWriteTokens: Int?
     }
 
     struct Choice: Decodable {

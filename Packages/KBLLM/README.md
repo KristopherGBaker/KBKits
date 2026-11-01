@@ -17,7 +17,7 @@ talks to a model. Conversation state, retrieval, and orchestration belong to the
 - `ModelEvent`: `.contentDelta`, `.reasoningDelta`, `.toolCall`, `.usage`, `.webSearchCall`,
   `.webSearchResult`, `.citation`, `.completed`.
 - `TokenUsage`: input/output, the prompt-cache read/write split, and `webSearchRequests`.
-- `KBLLMError`: the typed error surface, including `.cancelled`.
+- `KBLLMError`: the typed error surface, including `.cancelled` and the opt-in `.httpStatusRetryAfter`.
 - `JSONSchema` + `JSONSchema.parse(_:)`: schemas as values, or parsed from a JSON document.
 - `EnvironmentCredentialStore` / `KeychainCredentialStore` (KBLLMURLSession): the two host
   secret stores: the environment for a shell tool, the platform vault for a shipped app.
@@ -288,7 +288,7 @@ An adapter target exists so a consumer links only the providers it uses.
 ## Adapter knobs
 
 A control that only ONE provider has lives on that provider's adapter, never on `ModelRequest`,
-which must not carry one vendor's vocabulary. There are two:
+which must not carry one vendor's vocabulary. There are three:
 
 - `AnthropicModel(promptCaching:)` places Anthropic's prompt-cache breakpoints: `.off` (the default),
   `.systemPrompt` (the tools and system prompt, for a stable prompt sent with a different question
@@ -301,6 +301,18 @@ which must not carry one vendor's vocabulary. There are two:
   while reasoning is on, answering with "use /v1/responses or set reasoning_effort to 'none'".
   Leave it nil for a model that does not take the parameter, which rejects an unknown field
   rather than ignoring it.
+- `OpenAIModel(promptCacheKey:)` sends `prompt_cache_key`, omitted when nil (the default) or empty.
+  OpenAI caches prompts on its own; the key routes requests that share a prefix to the same cache
+  (more hits before GPT-5.6) and groups their cache accounting (GPT-5.6 and later). Pass one stable
+  value per conversation, never anything personal. Usage reads `prompt_tokens_details.cached_tokens`
+  into `cacheReadTokens` and `cache_write_tokens` (sent by the models that bill writes, GPT-5.6 and
+  later) into `cacheWriteTokens`; both are parts of `inputTokens` (`prompt_tokens`), as OpenAI counts.
+
+**Retry-After.** `KBLLMURLSession(reportsRetryAfter: true)` throws a non-success status whose response
+carries a readable `Retry-After` (delay-seconds or an HTTP date, `RetryAfter.seconds(from:now:)`) as
+`KBLLMError.httpStatusRetryAfter(code:message:retryAfter:)`, for every adapter on that transport.
+It is off by default, so a caller matching `.httpStatus` for its 429s sees what it always did; with
+it on, read `error.httpStatusCode` and `error.retryAfter` to treat both cases alike.
 
 `ModelRequest.webSearch` is NOT an exception to this rule, though only Anthropic implements it
 today: "search the web while answering" is a capability several providers offer under their own

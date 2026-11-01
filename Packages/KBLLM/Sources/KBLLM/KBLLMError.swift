@@ -18,6 +18,19 @@ public enum KBLLMError: Error, Sendable, Equatable {
     /// and any server-supplied message so a caller can distinguish 429 from 500.
     case httpStatus(code: Int, message: String)
 
+    /// A non-success HTTP status whose response carried a `Retry-After` header: the same
+    /// failure as ``httpStatus(code:message:)``, plus how long the provider asked the caller to
+    /// wait, in seconds (the header's delay-seconds, or its HTTP date less the time it was
+    /// read; never negative).
+    ///
+    /// A case of its own, not a third value on `httpStatus`, because a caller that binds
+    /// `case .httpStatus(let code, let message)` would stop compiling. And it is OPT-IN, never
+    /// thrown unless the transport was asked for it (the bundled transport's `reportsRetryAfter`),
+    /// because a caller that already matches `.httpStatus` for its 429 handling would otherwise
+    /// miss exactly the 429s that carry the header. Read ``httpStatusCode``, ``httpStatusMessage``
+    /// and ``retryAfter`` to treat the two cases alike.
+    case httpStatusRetryAfter(code: Int, message: String, retryAfter: TimeInterval)
+
     /// A required credential was absent or rejected. Carries the key the host's
     /// ``CredentialStore`` must supply.
     case missingCredential(key: String)
@@ -77,7 +90,7 @@ extension KBLLMError: LocalizedError {
         switch self {
         case .transport(let url, let underlying):
             "Could not reach \(url). \(underlying)"
-        case .httpStatus(let code, let message):
+        case .httpStatus(let code, let message), .httpStatusRetryAfter(let code, let message, _):
             message.isEmpty ? "The server answered \(code)." : "The server answered \(code). \(message)"
         case .missingCredential(let key):
             "No credential is set for \(key)."
@@ -100,6 +113,31 @@ extension KBLLMError: LocalizedError {
 }
 
 public extension KBLLMError {
+    /// The HTTP status of ``httpStatus(code:message:)`` or ``httpStatusRetryAfter(code:message:retryAfter:)``;
+    /// nil for every other case.
+    var httpStatusCode: Int? {
+        switch self {
+        case .httpStatus(let code, _), .httpStatusRetryAfter(let code, _, _): code
+        default: nil
+        }
+    }
+
+    /// The server's message of either HTTP-status case; nil for every other case.
+    var httpStatusMessage: String? {
+        switch self {
+        case .httpStatus(_, let message), .httpStatusRetryAfter(_, let message, _): message
+        default: nil
+        }
+    }
+
+    /// How long the provider asked to wait before trying again, in seconds, when the response
+    /// carried a `Retry-After` header (``httpStatusRetryAfter(code:message:retryAfter:)``); nil
+    /// otherwise.
+    var retryAfter: TimeInterval? {
+        if case .httpStatusRetryAfter(_, _, let seconds) = self { return seconds }
+        return nil
+    }
+
     /// Normalize any error into the typed surface. An error that is already a
     /// `KBLLMError` passes through unchanged; anything foreign is wrapped as
     /// ``upstream(cause:)`` so a non-typed failure can never escape the core.

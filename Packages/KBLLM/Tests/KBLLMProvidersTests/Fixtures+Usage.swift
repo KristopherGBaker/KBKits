@@ -75,4 +75,21 @@ extension Fixtures {
         + frame(data: openAIChoice("{}", finish: #""stop""#))
         + frame(data: "[DONE]")
     )
+
+    /// The usage frame of a model that bills cache writes (GPT-5.6 and later), in the current
+    /// Chat Completions shape: `usage.prompt_tokens_details.cache_write_tokens` beside
+    /// `cached_tokens`, both parts of `prompt_tokens` (12,000 = 4,000 read + 7,000 written +
+    /// 1,000 ordinary input, OpenAI's own worked example).
+    private static let openAIUsageFrameWithCacheWrites =
+        #"{"id":"chatcmpl-1","object":"chat.completion.chunk","model":"gpt-5.6-terra","choices":[],"#
+        + #""usage":{"prompt_tokens":12000,"completion_tokens":250,"total_tokens":12250,"#
+        + #""prompt_tokens_details":{"cached_tokens":4000,"cache_write_tokens":7000,"audio_tokens":0},"#
+        + #""completion_tokens_details":{"reasoning_tokens":0}}}"#
+
+    static let openAIWithCacheWrites = bytes(
+        frame(data: openAIContentDelta)
+        + frame(data: openAIChoice("{}", finish: #""stop""#))
+        + frame(data: openAIUsageFrameWithCacheWrites)
+        + frame(data: "[DONE]")
+    )
 }
