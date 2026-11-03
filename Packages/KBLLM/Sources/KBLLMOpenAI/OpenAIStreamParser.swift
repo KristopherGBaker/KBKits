@@ -53,7 +53,11 @@ struct OpenAIResponseParser {
                 // Both are nested details of `prompt_tokens`. `cached_tokens` counts billed reads
                 // only; `cache_write_tokens` is reported by the models that bill writes (GPT-5.6
                 // and later, at 1.25x input) and absent before them, which reads as 0 writes.
-                cacheReadTokens: usage.promptTokensDetails?.cachedTokens ?? 0,
+                // DeepSeek reports its disk-cache hits as `prompt_cache_hit_tokens` (with
+                // `prompt_tokens` = hits + misses, the same "input includes cache reads" meaning),
+                // and also as `cached_tokens`; the top-level field is the fallback for a server
+                // that sends only it. Either way it is read once, never added to the other.
+                cacheReadTokens: usage.promptTokensDetails?.cachedTokens ?? usage.promptCacheHitTokens ?? 0,
                 cacheWriteTokens: usage.promptTokensDetails?.cacheWriteTokens ?? 0,
                 reportedCostUSD: usage.cost
             )
@@ -148,6 +152,8 @@ struct OpenAIFrame: Decodable {
         let promptTokens: Int?
         let completionTokens: Int?
         let promptTokensDetails: PromptTokensDetails?
+        /// DeepSeek's `prompt_cache_hit_tokens`: the part of `prompt_tokens` read from its context cache.
+        let promptCacheHitTokens: Int?
         /// What the call cost in US dollars, sent by some OpenAI-compatible providers
         /// (OpenRouter's `usage.cost`); OpenAI itself does not send it.
         let cost: Double?

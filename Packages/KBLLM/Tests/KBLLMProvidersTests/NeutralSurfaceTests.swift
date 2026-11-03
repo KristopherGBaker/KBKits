@@ -38,15 +38,16 @@ struct NeutralSurfaceTests {
         // tokens, top-p), pinned here alongside the original fields so a FURTHER undeclared
         // field still fails this guard.
         // `webSearch` (request) and `webSearches` + `citations` (response) are the web search
-        // unit's deliberate additions, pinned the same way.
+        // unit's deliberate additions, pinned the same way. `reasoning` (message and response)
+        // is the reasoning replay's (DeepSeek's thinking mode with tools).
         #expect(
             labels(ModelRequest(messages: []))
                 == ["messages", "tools", "responseSchema", "options", "webSearch"]
         )
-        #expect(labels(Message(role: .user, text: "x")) == ["role", "content"])
+        #expect(labels(Message(role: .user, text: "x")) == ["role", "content", "reasoning"])
         #expect(
             labels(ModelResponse(content: ""))
-                == ["content", "toolCalls", "finishReason", "usage", "webSearches", "citations"]
+                == ["content", "toolCalls", "finishReason", "usage", "webSearches", "citations", "reasoning"]
         )
         #expect(
             labels(ToolDefinition(name: "n", description: "d", parameters: .string(description: nil)))

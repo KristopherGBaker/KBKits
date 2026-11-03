@@ -12,7 +12,10 @@ talks to a model. Conversation state, retrieval, and orchestration belong to the
 - `LanguageModel`: the seam. ONE requirement an adapter writes, `stream(_:) -> AsyncThrowingStream<ModelEvent, any Error>`.
   `complete(_:)` is derived in an extension, so streaming and collected results cannot disagree.
   `supportsWebSearch` is a capability flag that defaults to `false`.
-- `Message` / `MessageContent`: `.text`, `.image(data:mimeType:)`, `.toolCall`, `.toolResult`.
+- `Message` / `MessageContent`: `.text`, `.image(data:mimeType:)`, `.toolCall`, `.toolResult`. An
+  assistant `Message` may carry the `reasoning` it streamed (a field, not a content part), and
+  `ModelResponse.reasoning` collects a call's `.reasoningDelta`s; `AgentSession` puts each turn's on
+  the assistant message it appends. Only `OpenAIModel(replaysReasoning:)` sends it back.
 - `ModelRequest`: messages, tools, `responseSchema`, `GenerationOptions`, `webSearch`.
 - `ModelEvent`: `.contentDelta`, `.reasoningDelta`, `.toolCall`, `.usage`, `.webSearchCall`,
   `.webSearchResult`, `.citation`, `.completed`.
@@ -288,7 +291,7 @@ An adapter target exists so a consumer links only the providers it uses.
 ## Adapter knobs
 
 A control that only ONE provider has lives on that provider's adapter, never on `ModelRequest`,
-which must not carry one vendor's vocabulary. There are three:
+which must not carry one vendor's vocabulary. There are four:
 
 - `AnthropicModel(promptCaching:)` places Anthropic's prompt-cache breakpoints: `.off` (the default),
   `.systemPrompt` (the tools and system prompt, for a stable prompt sent with a different question
@@ -307,6 +310,12 @@ which must not carry one vendor's vocabulary. There are three:
   value per conversation, never anything personal. Usage reads `prompt_tokens_details.cached_tokens`
   into `cacheReadTokens` and `cache_write_tokens` (sent by the models that bill writes, GPT-5.6 and
   later) into `cacheWriteTokens`; both are parts of `inputTokens` (`prompt_tokens`), as OpenAI counts.
+  DeepSeek's `prompt_cache_hit_tokens` (also part of `prompt_tokens`) is read as the cache reads
+  when `cached_tokens` is absent. Request bodies are written with sorted keys.
+- `OpenAIModel(replaysReasoning:)` (off by default) sends each assistant message's `reasoning` back
+  as `reasoning_content`, never on another role and never when empty. DeepSeek's thinking mode needs
+  it: once a request has tools, a later request without each earlier assistant turn's
+  `reasoning_content` is a 400. Off elsewhere, because a strict server may refuse an unknown key.
 
 **Retry-After.** `KBLLMURLSession(reportsRetryAfter: true)` throws a non-success status whose response
 carries a readable `Retry-After` (delay-seconds or an HTTP date, `RetryAfter.seconds(from:now:)`) as

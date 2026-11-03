@@ -9,8 +9,9 @@ public struct RunResult: Sendable, Equatable {
     public var content: String
 
     /// The model's reasoning, kept SEPARATE from `content` so it is never mistaken for the
-    /// answer and never fed back into history. It is collected rather than discarded so the
-    /// collected form stays a total fold of the streamed events.
+    /// answer. It is collected rather than discarded so the collected form stays a total fold
+    /// of the streamed events. In `messages` each turn's reasoning rides on its own assistant
+    /// message (`Message.reasoning`), never in its content.
     public var reasoning: String
     public var toolCalls: [ToolCallRecord]
     public var toolResults: [ToolResult]
@@ -145,6 +146,7 @@ public struct AgentSession: Sendable {
             )
 
             var turnText = ""
+            var turnReasoning = ""
             var turnCalls: [ToolCallRecord] = []
             var turnFinish: FinishReason?
             for try await event in model.stream(turnRequest) {
@@ -154,10 +156,12 @@ public struct AgentSession: Sendable {
                     await emit(.contentDelta(delta))
                 case .reasoningDelta(let delta):
                     // Reasoning is forwarded but never joins `turnText`, which becomes the
-                    // assistant message fed back into history. Dropping it here would put a
-                    // caller back where the adapters started: a reasoning model can think
-                    // for a long time before its first answer token, and a session that
-                    // emits nothing in the meantime is indistinguishable from a hang.
+                    // assistant message's content; it rides on that message's `reasoning`
+                    // instead, for the adapters that must send it back (DeepSeek with tools).
+                    // Not forwarding it would put a caller back where the adapters started: a
+                    // reasoning model can think for a long time before its first answer
+                    // token, and a session that emits nothing meanwhile looks like a hang.
+                    turnReasoning += delta
                     await emit(.reasoningDelta(delta))
                 case .toolCall(let call):
                     turnCalls.append(call)
@@ -182,7 +186,9 @@ public struct AgentSession: Sendable {
             var assistantParts: [MessageContent] = []
             if !turnText.isEmpty { assistantParts.append(.text(turnText)) }
             for call in turnCalls { assistantParts.append(.toolCall(call)) }
-            messages.append(Message(role: .assistant, content: assistantParts))
+            messages.append(Message(
+                role: .assistant, content: assistantParts, reasoning: turnReasoning.isEmpty ? nil : turnReasoning
+            ))
 
             for call in turnCalls {
                 await emit(.toolInvoked(call))

@@ -41,10 +41,19 @@ public enum MessageContent: Sendable, Equatable, Codable {
 public struct Message: Sendable, Equatable, Codable {
     public var role: MessageRole
     public var content: [MessageContent]
+    /// The reasoning the model streamed (`ModelEvent.reasoningDelta`) while producing this ASSISTANT turn, or nil. It is a
+    /// field beside `content` rather than a fourth guarded `MessageContent` case on purpose: reasoning is not a part of the
+    /// answer and has no place in its order, and a field leaves every exhaustive switch over `MessageContent` (here and in
+    /// callers) untouched. Some providers need it sent back: DeepSeek's thinking mode answers a tool-using request with a 400
+    /// unless every earlier assistant message carries its `reasoning_content`. Only an adapter told to replay it does so
+    /// (`OpenAIModel(replaysReasoning:)`); every other adapter ignores it. Optional and nil by default, so a message without
+    /// it encodes exactly as before and JSON written before the field existed still decodes.
+    public var reasoning: String?
 
-    public init(role: MessageRole, content: [MessageContent]) {
+    public init(role: MessageRole, content: [MessageContent], reasoning: String? = nil) {
         self.role = role
         self.content = content
+        self.reasoning = reasoning
     }
 
     /// The common case kept a one-liner: a plain-text turn is a single `.text` part, so
@@ -224,6 +233,9 @@ public struct ModelResponse: Sendable, Equatable {
     public var webSearches: [WebSearch]
     /// The sources the model cited, in order, each locating its span of `content`.
     public var citations: [WebSearchCitation]
+    /// Every `.reasoningDelta` of the call, concatenated; empty when the model streamed none. Kept apart from `content`
+    /// (reasoning is not the answer) so a caller can put it on the assistant `Message` it appends (`Message.reasoning`).
+    public var reasoning: String
 
     public init(
         content: String,
@@ -231,9 +243,11 @@ public struct ModelResponse: Sendable, Equatable {
         finishReason: FinishReason? = nil,
         usage: TokenUsage? = nil,
         webSearches: [WebSearch] = [],
-        citations: [WebSearchCitation] = []
+        citations: [WebSearchCitation] = [],
+        reasoning: String = ""
     ) {
         self.content = content
+        self.reasoning = reasoning
         self.toolCalls = toolCalls
         self.finishReason = finishReason
         self.usage = usage
@@ -268,6 +282,7 @@ public extension LanguageModel {
     /// path gets the typed-error guarantee for free.
     func complete(_ request: ModelRequest) async throws(KBLLMError) -> ModelResponse {
         var content = ""
+        var reasoning = ""
         var toolCalls: [ToolCallRecord] = []
         var finishReason: FinishReason?
         var usage: TokenUsage?
@@ -281,11 +296,10 @@ public extension LanguageModel {
                 switch event {
                 case .contentDelta(let delta):
                     content += delta
-                case .reasoningDelta:
-                    // Reasoning is not the answer, so it is deliberately dropped from the
-                    // collected `content`. A caller that wants it consumes the stream and
-                    // reads `.reasoningDelta` directly.
-                    break
+                case .reasoningDelta(let delta):
+                    // Reasoning is not the answer, so it never joins the collected `content`;
+                    // it is collected on its own into `ModelResponse.reasoning`.
+                    reasoning += delta
                 case .toolCall(let record):
                     toolCalls.append(record)
                 case .usage(let reported):
@@ -309,7 +323,8 @@ public extension LanguageModel {
             finishReason: finishReason,
             usage: usage,
             webSearches: searches.searches,
-            citations: searches.citations
+            citations: searches.citations,
+            reasoning: reasoning
         )
     }
 

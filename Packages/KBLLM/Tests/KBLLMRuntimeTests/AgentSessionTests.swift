@@ -291,9 +291,29 @@ private func runOneConcurrencyTrial() async throws {
             .joined()
         #expect(!assistantText.contains("weighing"))
         #expect(assistantText == "the answer")
+        // It rides on the assistant message's own `reasoning`, for the adapters that replay it.
+        #expect(result.messages.last { $0.role == .assistant }?.reasoning == "weighing options")
 
         // The collected form stays a total fold of the streamed events.
         #expect(fold(streamed) == fromResult(result))
+    }
+
+    @Test func eachToolTurnsReasoningIsInTheNextRequestsHistory() async throws {
+        let requests = Box<[ModelRequest]>([])
+        let call = ToolCallRecord(id: "c1", name: "echo", arguments: Data("{}".utf8))
+        let model = ScriptedModel(turns: [
+            [.reasoningDelta("call echo"), .toolCall(call), .completed(.toolCalls)],
+            [.contentDelta("done"), .completed(.stop)]
+        ], requests: requests)
+        let tools = ToolBox(tools: [countingTool(named: "echo", counter: Box(0))])
+        let result = try await AgentSession(model: model, tools: tools).run(
+            ModelRequest(messages: [Message(role: .user, text: "q")])
+        )
+        let second = try #require(requests.get().dropFirst().first)
+        let assistant = try #require(second.messages.first { $0.role == .assistant })
+        #expect(assistant.reasoning == "call echo")
+        // A turn that streamed no reasoning carries none, rather than an empty string.
+        #expect(result.messages.last?.reasoning == nil)
     }
 
     // MARK: Assertion 3 - round-trip bound stops a runaway model.

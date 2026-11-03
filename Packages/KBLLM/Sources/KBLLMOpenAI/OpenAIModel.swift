@@ -21,6 +21,7 @@ public struct OpenAIModel: LanguageModel {
     private let reasoningEffort: ReasoningEffort?
     private let outputTokenField: OutputTokenField
     private let promptCacheKey: String?
+    private let replaysReasoning: Bool
     private let transport: any HTTPTransport
     private let credentials: any CredentialStore
 
@@ -86,6 +87,11 @@ public struct OpenAIModel: LanguageModel {
     ///   from GPT-5.6 it groups their cache accounting. Pass one stable value per conversation,
     ///   never anything personal (a name, a key, the content). An OpenAI-compatible server that
     ///   does not know the field may refuse it, so leave it nil there.
+    /// - Parameter replaysReasoning: when true, each assistant message's `Message.reasoning` (when not empty) is sent back as
+    ///   `reasoning_content` on its wire message. DeepSeek's thinking mode REQUIRES it: once a request has tools, every later
+    ///   request must carry each earlier assistant message's `reasoning_content`, or it is refused with a 400 (without tools
+    ///   it is ignored). Off by default, so a caller that never sets it sends exactly the body it always did: a strict
+    ///   OpenAI-compatible server may refuse a message key it does not know. Never sent on a user, system or tool message.
     public init(
         model: String,
         credentialKey: String,
@@ -94,6 +100,7 @@ public struct OpenAIModel: LanguageModel {
         reasoningEffort: ReasoningEffort? = nil,
         outputTokenField: OutputTokenField = .maxTokens,
         promptCacheKey: String? = nil,
+        replaysReasoning: Bool = false,
         transport: any HTTPTransport,
         credentials: any CredentialStore
     ) {
@@ -104,6 +111,7 @@ public struct OpenAIModel: LanguageModel {
         self.reasoningEffort = reasoningEffort
         self.outputTokenField = outputTokenField
         self.promptCacheKey = promptCacheKey.flatMap { $0.isEmpty ? nil : $0 }
+        self.replaysReasoning = replaysReasoning
         self.transport = transport
         self.credentials = credentials
     }
@@ -116,6 +124,7 @@ public struct OpenAIModel: LanguageModel {
         let reasoningEffort = self.reasoningEffort
         let outputTokenField = self.outputTokenField
         let promptCacheKey = self.promptCacheKey
+        let replaysReasoning = self.replaysReasoning
         let transport = self.transport
         let credentials = self.credentials
         return AsyncThrowingStream { continuation in
@@ -154,7 +163,8 @@ public struct OpenAIModel: LanguageModel {
                         extraHeaders: extraHeaders,
                         reasoningEffort: reasoningEffort,
                         outputTokenField: outputTokenField,
-                        promptCacheKey: promptCacheKey
+                        promptCacheKey: promptCacheKey,
+                        replaysReasoning: replaysReasoning
                     )
 
                     // Throw sites 3 (transport reachability), 4 (`.httpStatus` from the

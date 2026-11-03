@@ -6,7 +6,7 @@ import KBLLM
 // the type past the house type-body limit.
 extension OpenAIModel {
 
-    // Eight parameters on a builder with one call site, each a distinct value captured
+    // Nine parameters on a builder with one call site, each a distinct value captured
     // out of the struct before the escaping closure. Bundling two of them into a type that
     // exists only to satisfy a count would add indirection and explain nothing.
     // swiftlint:disable:next function_parameter_count
@@ -18,7 +18,8 @@ extension OpenAIModel {
         extraHeaders: [String: String],
         reasoningEffort: ReasoningEffort?,
         outputTokenField: OutputTokenField,
-        promptCacheKey: String? = nil
+        promptCacheKey: String? = nil,
+        replaysReasoning: Bool = false
     ) throws -> HTTPRequestSpec {
         var body: [String: Any] = [
             "model": model,
@@ -88,7 +89,7 @@ extension OpenAIModel {
         if let reasoningEffort { body["reasoning_effort"] = reasoningEffort.rawValue }
         // Only when the caller asked: an absent key is the body this adapter always sent.
         if let promptCacheKey { body["prompt_cache_key"] = promptCacheKey }
-        body["messages"] = try request.messages.flatMap(messageJSON)
+        body["messages"] = try request.messages.flatMap { try messageJSON($0, replaysReasoning: replaysReasoning) }
         let data = try serialize(body)
         // The caller's headers go in FIRST so the adapter's own overwrite them on collision:
         // a caller cannot replace the Authorization header built from the credential it just
@@ -193,12 +194,16 @@ extension OpenAIModel {
     /// Translate one neutral message into the Chat Completions message array. A single
     /// neutral turn can expand to several wire messages (an assistant `tool_calls` message
     /// plus its text), which is why this returns an array the caller flat-maps.
-    static func messageJSON(_ message: Message) throws -> [[String: Any]] {
+    ///
+    /// `replaysReasoning` (`OpenAIModel(replaysReasoning:)`) adds an assistant message's reasoning as `reasoning_content`;
+    /// no other role ever carries it.
+    static func messageJSON(_ message: Message, replaysReasoning: Bool = false) throws -> [[String: Any]] {
         switch message.role {
         case .tool:
             return try message.content.compactMap(toolResultMessage)
         case .assistant:
-            return try [assistantMessage(message.content)]
+            let reasoning = replaysReasoning ? message.reasoning : nil
+            return try [assistantMessage(message.content, reasoning: reasoning)]
         default:
             // A turn carrying an image cannot flatten to a plain string: Chat Completions
             // takes multimodal content as an ORDERED ARRAY of parts, so the text and the
@@ -240,7 +245,9 @@ extension OpenAIModel {
         }
     }
 
-    static func assistantMessage(_ content: [MessageContent]) throws -> [String: Any] {
+    /// `reasoning`, when not empty, rides as `reasoning_content`, exactly the text the model streamed, so a provider that
+    /// checks or caches it gets back the bytes it sent.
+    static func assistantMessage(_ content: [MessageContent], reasoning: String? = nil) throws -> [String: Any] {
         var toolCalls: [[String: Any]] = []
         for part in content {
             if case .toolCall(let record) = part {
@@ -257,6 +264,9 @@ extension OpenAIModel {
         var message: [String: Any] = ["role": "assistant", "content": joinedText(content)]
         if !toolCalls.isEmpty {
             message["tool_calls"] = toolCalls
+        }
+        if let reasoning, !reasoning.isEmpty {
+            message["reasoning_content"] = reasoning
         }
         return message
     }
@@ -290,9 +300,11 @@ extension OpenAIModel {
         return String(data: data, encoding: .utf8) ?? ""
     }
 
+    /// Sorted keys, so the same request is the same bytes in every process (a Swift dictionary's order is per-process):
+    /// a provider caching prompt prefixes (OpenAI, DeepSeek) and a test comparing two requests see one stable body.
     static func serialize(_ object: [String: Any]) throws -> Data {
         do {
-            return try JSONSerialization.data(withJSONObject: object)
+            return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         } catch {
             throw KBLLMError.invalidRequest(field: "body", reason: "request body could not be serialized")
         }
