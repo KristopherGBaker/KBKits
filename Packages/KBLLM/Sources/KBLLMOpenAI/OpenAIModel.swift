@@ -83,8 +83,10 @@ public struct OpenAIModel: LanguageModel {
     ///   OpenAI-compatible endpoints differ in what they want beyond the wire format itself
     ///   (OpenRouter attributes traffic by `HTTP-Referer` and `X-Title`), and inventing a
     ///   named option per host would make this adapter grow one field per vendor. The
-    ///   Authorization and content-type headers this adapter sets itself always win, so a
-    ///   caller cannot accidentally replace the credential it just supplied.
+    ///   Authorization and content-type headers this adapter sets itself always win, in any
+    ///   letter case, so a caller cannot accidentally replace the credential it just supplied.
+    ///   An empty secret from the store sends no Authorization header (a keyless server, or one
+    ///   that takes its key in a header the caller passes here).
     /// - Parameter reasoningEffort: sent as `reasoning_effort` when set, and omitted entirely
     ///   when nil so the model's own default holds. Set it to `.none` to use function tools with
     ///   a reasoning model on Chat Completions; leave it nil for a model that does not take the

@@ -93,13 +93,24 @@ extension OpenAIModel {
         if let promptCacheKey { body["prompt_cache_key"] = promptCacheKey }
         body["messages"] = try request.messages.flatMap { try messageJSON($0, replaysReasoning: replaysReasoning) }
         let data = try serialize(body)
-        // The caller's headers go in FIRST so the adapter's own overwrite them on collision:
-        // a caller cannot replace the Authorization header built from the credential it just
-        // resolved, which is the one header getting this wrong would silently break.
-        var headers = extraHeaders
-        headers["Authorization"] = "Bearer \(secret)"
-        headers["content-type"] = "application/json"
+        let headers = requestHeaders(secret: secret, extraHeaders: extraHeaders)
         return HTTPRequestSpec(method: .post, url: endpoint, headers: headers, body: data)
+    }
+
+    /// The request's headers: the caller's, then the adapter's own, which win on a collision in
+    /// any letter case (HTTP header names are case-insensitive, so `authorization` would otherwise
+    /// ride beside `Authorization` and the transport would pick one): a caller cannot replace the
+    /// Authorization header built from the credential it just resolved, nor the content type. An
+    /// EMPTY secret sends no Authorization header at all, rather than a bare `Bearer `: that is how
+    /// a keyless server is reached, or one that takes its key in a header of its own (then the
+    /// caller's `Authorization`, if it passes one, is the only one sent).
+    static func requestHeaders(secret: String, extraHeaders: [String: String]) -> [String: String] {
+        var own = ["content-type": "application/json"]
+        if !secret.isEmpty { own["Authorization"] = "Bearer \(secret)" }
+        let ownNames = Set(own.keys.map { $0.lowercased() })
+        var headers = extraHeaders.filter { !ownNames.contains($0.key.lowercased()) }
+        headers.merge(own) { _, adapter in adapter }
+        return headers
     }
 
     static func toolJSON(_ tool: ToolDefinition) -> [String: Any] {
