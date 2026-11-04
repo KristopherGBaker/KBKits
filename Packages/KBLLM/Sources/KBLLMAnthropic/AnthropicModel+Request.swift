@@ -141,7 +141,7 @@ extension AnthropicModel {
         // request writes them verbatim. Every other request keeps the bytes it always had.
         // Signed thinking blocks are sent back as received too.
         let verbatim = request.webSearch != nil || !pausedTurn.content.isEmpty
-            || request.messages.contains { !($0.reasoningBlocks ?? []).isEmpty }
+            || request.messages.contains(where: carriesAnthropicReasoning)
         // Keys are sorted because a Swift dictionary's order follows a hash seed that changes
         // with every process: unsorted, the same request would have different bytes after a
         // relaunch, and a prompt-cache entry (a byte-prefix match) would never be read across
@@ -297,16 +297,24 @@ extension AnthropicModel {
         var blocks = try message.content.map(contentBlock)
         // An assistant turn's thinking goes back unchanged, ahead of what it led to, as the model returned it.
         if message.role == .assistant, let reasoning = message.reasoningBlocks {
-            blocks = reasoning.map(reasoningBlock) + blocks
+            blocks = reasoning.compactMap(reasoningBlock) + blocks
         }
         return ["role": role, "content": blocks]
     }
 
-    private static func reasoningBlock(_ block: ReasoningBlock) -> [String: Any] {
+    /// Another provider's block (an OpenAI Responses reasoning item) is nil: Anthropic could not read it and would
+    /// refuse the unknown block type, so a turn first made elsewhere goes back without it.
+    private static func reasoningBlock(_ block: ReasoningBlock) -> [String: Any]? {
         switch block {
         case let .thinking(text, signature): ["type": "thinking", "thinking": text, "signature": signature]
         case let .redacted(data): ["type": "redacted_thinking", "data": data]
+        case .openAIReasoning: nil
         }
+    }
+
+    /// Whether a message carries a block this adapter sends back.
+    static func carriesAnthropicReasoning(_ message: Message) -> Bool {
+        (message.reasoningBlocks ?? []).contains { reasoningBlock($0) != nil }
     }
 
     private static func contentBlock(_ part: MessageContent) throws -> [String: Any] {

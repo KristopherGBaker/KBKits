@@ -104,6 +104,19 @@ struct NeutralSurfaceTests {
         #expect(!ownSource.contains(defaultArm), "the frozen-enum switches must not use a default arm")
     }
 
+    @Test func reasoningBlockCasesAreFrozenByAllowlist() {
+        // A function of its own so the switch above stays within the complexity limit; the source check there covers
+        // this one too, being the same file.
+        let block: ReasoningBlock = .redacted(data: "x")
+        switch block {
+        case .thinking: break
+        case .redacted: break
+        // `.openAIReasoning` (an OpenAI Responses reasoning item, kept to be sent back) is the EIGHTH deliberate
+        // guarded-enum update, enumerated explicitly so a FURTHER undeclared block still fails to compile this target.
+        case .openAIReasoning: break
+        }
+    }
+
     // MARK: Assertion 13(c1) - no retry: a single transport failure yields one attempt.
 
     @Test func aTransportFailureIsNotRetried() async {

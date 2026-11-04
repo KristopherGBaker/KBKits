@@ -2,7 +2,7 @@
 
 A provider-neutral LLM client. One `LanguageModel` protocol whose single adapter-written
 requirement is `stream(_:)`, value-typed messages and requests, `@Tool`/`@Schema` macros, and adapters for
-Apple Foundation Models, Anthropic, and any OpenAI-compatible endpoint.
+Apple Foundation Models, Anthropic, OpenAI's Responses API, and any OpenAI-compatible (Chat Completions) endpoint.
 
 **What it is not.** Not an agent framework, not a RAG library, not a prompt-template engine. It
 talks to a model. Conversation state, retrieval, and orchestration belong to the caller.
@@ -15,9 +15,11 @@ talks to a model. Conversation state, retrieval, and orchestration belong to the
 - `Message` / `MessageContent`: `.text`, `.image(data:mimeType:)`, `.toolCall`, `.toolResult`. An
   assistant `Message` may carry the `reasoning` it streamed (a field, not a content part), and
   `ModelResponse.reasoning` collects a call's `.reasoningDelta`s; `AgentSession` puts each turn's on
-  the assistant message it appends. Only `OpenAIModel(replaysReasoning:)` sends it back.
+  the assistant message it appends. Only `OpenAIModel(replaysReasoning:)` sends it back. Its
+  `reasoningBlocks` keep the provider's own reasoning to send back unchanged (`ReasoningBlock`: Anthropic's
+  signed `.thinking` and `.redacted`, OpenAI's encrypted `.openAIReasoning`); each adapter sends only its own.
 - `ModelRequest`: messages, tools, `responseSchema`, `GenerationOptions`, `webSearch`.
-- `ModelEvent`: `.contentDelta`, `.reasoningDelta`, `.toolCall`, `.usage`, `.webSearchCall`,
+- `ModelEvent`: `.contentDelta`, `.reasoningDelta`, `.reasoningBlock`, `.toolCall`, `.usage`, `.webSearchCall`,
   `.webSearchResult`, `.citation`, `.completed`.
 - `TokenUsage`: input/output, the prompt-cache read/write split, and `webSearchRequests`.
 - `KBLLMError`: the typed error surface, including `.cancelled` and the opt-in `.httpStatusRetryAfter`.
@@ -291,7 +293,7 @@ An adapter target exists so a consumer links only the providers it uses.
 ## Adapter knobs
 
 A control that only ONE provider has lives on that provider's adapter, never on `ModelRequest`,
-which must not carry one vendor's vocabulary. There are four:
+which must not carry one vendor's vocabulary. There are these:
 
 - `AnthropicModel(promptCaching:)` places Anthropic's prompt-cache breakpoints: `.off` (the default),
   `.systemPrompt` (the tools and system prompt, for a stable prompt sent with a different question
@@ -316,6 +318,14 @@ which must not carry one vendor's vocabulary. There are four:
   as `reasoning_content`, never on another role and never when empty. DeepSeek's thinking mode needs
   it: once a request has tools, a later request without each earlier assistant turn's
   `reasoning_content` is a 400. Off elsewhere, because a strict server may refuse an unknown key.
+- `OpenAIResponsesModel` is OpenAI's `POST /v1/responses`, a sibling of `OpenAIModel` rather than a mode of it:
+  OpenAI's current models call functions only there, while the OpenAI-compatible servers speak only Chat
+  Completions. It takes `baseURL`, `extraHeaders`, `promptCacheKey` (as above), `reasoningEffort`
+  (`reasoning.effort`: `none` through `max`, including `minimal`) and `reasoningSummary` (`reasoning.summary`,
+  streamed as `.reasoningDelta`), each omitted when nil. Every request is stateless (`store: false`, with
+  `include: ["reasoning.encrypted_content"]`); each reasoning item comes back as a
+  `.reasoningBlock(.openAIReasoning(...))` and goes back, unchanged, ahead of its turn's output. Usage reads
+  `input_tokens_details.cached_tokens` and `.cache_write_tokens`. No web search: it is refused.
 
 **Retry-After.** `KBLLMURLSession(reportsRetryAfter: true)` throws a non-success status whose response
 carries a readable `Retry-After` (delay-seconds or an HTTP date, `RetryAfter.seconds(from:now:)`) as

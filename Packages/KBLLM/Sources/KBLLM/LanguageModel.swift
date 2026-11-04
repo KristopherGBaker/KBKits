@@ -52,8 +52,9 @@ public struct Message: Sendable, Equatable, Codable {
     public var reasoning: String?
     /// The provider's own reasoning blocks for this ASSISTANT turn, in the order they arrived
     /// (`ModelEvent.reasoningBlock`), or nil. Anthropic signs each thinking block and asks for it back UNCHANGED, above
-    /// all within a tool loop, where it carries the reasoning behind the tool calls; only its adapter reads this, and
-    /// it sends the blocks before the turn's content. Optional and nil by default, like `reasoning`, so older JSON
+    /// all within a tool loop, where it carries the reasoning behind the tool calls; OpenAI's Responses API does the
+    /// same with its encrypted reasoning items. Each adapter reads only its own provider's blocks and sends them before
+    /// the turn's content. Optional and nil by default, like `reasoning`, so older JSON
     /// decodes and a message without it encodes as before.
     public var reasoningBlocks: [ReasoningBlock]?
 
@@ -76,10 +77,15 @@ public struct Message: Sendable, Equatable, Codable {
 /// One reasoning block exactly as the provider returned it, to be sent back with its turn. Anthropic's thinking blocks
 /// carry a `signature` over their text (which may be empty: a model whose thinking display is omitted streams none),
 /// and a redacted block carries only encrypted `data`; the API refuses either if it comes back modified, so both are
-/// kept verbatim.
+/// kept verbatim. Each case belongs to one provider and only that provider's adapter sends it back (each skips the
+/// other's), so a conversation that changes provider loses only the other provider's reasoning, never its turn.
 public enum ReasoningBlock: Sendable, Equatable, Codable {
     case thinking(text: String, signature: String)
     case redacted(data: String)
+    /// An OpenAI Responses `reasoning` output item (`OpenAIResponsesModel`): its `id`, its `encrypted_content` (the
+    /// reasoning itself, which a stateless `store: false` request can only carry this way) and its summary texts. The
+    /// API asks for a tool loop's items back with the function calls they led to. A deliberate guarded-enum update.
+    case openAIReasoning(id: String, encryptedContent: String, summary: [String])
 }
 
 /// The input to a model call. Adapters translate this into their wire format; it
@@ -217,8 +223,9 @@ public enum ModelEvent: Sendable, Equatable {
     /// followed by a sudden answer.
     case reasoningDelta(String)
     /// A finished reasoning block for the caller to keep on the turn's `Message.reasoningBlocks` and send back
-    /// (Anthropic's signed thinking). Emitted when the block ends, after its `reasoningDelta`s; a caller that only
-    /// shows reasoning can ignore it. Only an adapter whose provider asks for its blocks back emits it.
+    /// (Anthropic's signed thinking, an OpenAI Responses reasoning item). Emitted when the block ends, after its
+    /// `reasoningDelta`s; a caller that only shows reasoning can ignore it. Only an adapter whose provider asks for its
+    /// blocks back emits it.
     case reasoningBlock(ReasoningBlock)
     case toolCall(ToolCallRecord)
     /// What the call consumed. Emitted AT MOST ONCE per call, immediately before

@@ -11,7 +11,8 @@ adapter must write: stream a request and get events back. (Its one other member,
 can never disagree about what the model said.
 
 Adapters live in their own targets, so a consumer links only what it uses: `KBLLMAnthropic`,
-`KBLLMOpenAI` (which also covers OpenRouter, LM Studio, Ollama and vLLM), and `KBLLMApple` for
+`KBLLMOpenAI` (`OpenAIModel` over Chat Completions, which also covers OpenRouter, LM Studio, Ollama and vLLM,
+and `OpenAIResponsesModel` over OpenAI's Responses API, which its current models need for function calling), and `KBLLMApple` for
 Apple's Foundation Models: the on-device model, and Apple's Private Cloud Compute server model
 through `AppleModelBackends.privateCloudCompute()`, which a macOS 26 app can call with no
 availability check. That model is live only on macOS 27 and only for an app signed with the
