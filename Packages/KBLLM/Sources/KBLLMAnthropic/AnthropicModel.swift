@@ -31,6 +31,8 @@ public struct AnthropicModel: LanguageModel {
     private let credentialKey: String
     private let baseURL: String
     private let promptCaching: AnthropicPromptCaching
+    private let thinking: AnthropicThinking?
+    private let effort: AnthropicEffort?
     private let transport: any HTTPTransport
     private let credentials: any CredentialStore
 
@@ -54,11 +56,17 @@ public struct AnthropicModel: LanguageModel {
     ///   adapter-level knob rather than a field on `ModelRequest` because no other provider has
     ///   this concept, and a neutral request must not carry one provider's vocabulary. Whether it
     ///   paid off is visible in `TokenUsage.cacheReadTokens`.
+    /// - Parameter thinking: the `thinking` field, or nil (the default) for none, so the model's own default holds.
+    ///   Each thinking block the model returns, signed, is emitted as a `.reasoningBlock` and sent back with its turn
+    ///   (`Message.reasoningBlocks`) whatever this is.
+    /// - Parameter effort: `output_config.effort`, or nil (the default) for the model's own.
     public init(
         model: String,
         credentialKey: String,
         baseURL: String = "https://api.anthropic.com",
         promptCaching: AnthropicPromptCaching = .off,
+        thinking: AnthropicThinking? = nil,
+        effort: AnthropicEffort? = nil,
         transport: any HTTPTransport,
         credentials: any CredentialStore
     ) {
@@ -66,6 +74,8 @@ public struct AnthropicModel: LanguageModel {
         self.credentialKey = credentialKey
         self.baseURL = baseURL
         self.promptCaching = promptCaching
+        self.thinking = thinking
+        self.effort = effort
         self.transport = transport
         self.credentials = credentials
     }
@@ -78,6 +88,7 @@ public struct AnthropicModel: LanguageModel {
         let credentialKey = self.credentialKey
         let baseURL = self.baseURL
         let promptCaching = self.promptCaching
+        let reasoning = AnthropicReasoningSettings(thinking: thinking, effort: effort)
         let transport = self.transport
         let credentials = self.credentials
         return AsyncThrowingStream { continuation in
@@ -130,6 +141,7 @@ public struct AnthropicModel: LanguageModel {
                             secret: key,
                             endpoint: endpoint,
                             promptCaching: promptCaching,
+                            reasoning: reasoning,
                             pausedTurn: pausedTurn
                         )
                         // Throw sites 3 (transport reachability), 4 (`.httpStatus` from the

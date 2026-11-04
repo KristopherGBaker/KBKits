@@ -93,6 +93,8 @@ struct AnthropicFrame: Decodable {
         let toolUseId: String?
         /// A `web_search_tool_result` block's whole result, which arrives in the start frame.
         let content: SearchResultContent?
+        /// A `redacted_thinking` block's encrypted reasoning, which arrives whole in the start frame.
+        let data: String?
     }
 
     struct Delta: Decodable {
@@ -101,6 +103,8 @@ struct AnthropicFrame: Decodable {
         // The reasoning payload of a `thinking_delta`, the single reasoning wire form this
         // adapter promises, covered by the `anthropicReasoning` fixture.
         let thinking: String?
+        /// A `signature_delta`'s signature over the thinking block it closes.
+        let signature: String?
         let partialJson: String?
         let stopReason: String?
         /// A `citations_delta`'s citation for the text block it arrives in.

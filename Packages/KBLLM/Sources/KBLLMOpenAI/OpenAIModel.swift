@@ -22,6 +22,7 @@ public struct OpenAIModel: LanguageModel {
     private let outputTokenField: OutputTokenField
     private let promptCacheKey: String?
     private let replaysReasoning: Bool
+    private let thinking: ThinkingSwitch?
     private let transport: any HTTPTransport
     private let credentials: any CredentialStore
 
@@ -37,6 +38,18 @@ public struct OpenAIModel: LanguageModel {
         case low
         case medium
         case high
+        /// Above `high`, on the models that take it (DeepSeek maps it to `high`).
+        case xhigh
+        /// The most, on the models that take it (DeepSeek's highest).
+        case max
+    }
+
+    /// The `thinking: {type: "enabled" | "disabled"}` switch some OpenAI-compatible providers take beside
+    /// `reasoning_effort` (DeepSeek, whose thinking is on by default, Z.ai). OpenAI itself does not: it turns reasoning
+    /// down with `reasoning_effort` alone.
+    public enum ThinkingSwitch: String, Sendable, Hashable, CaseIterable {
+        case enabled
+        case disabled
     }
 
     /// Which field carries the output-token limit.
@@ -87,11 +100,14 @@ public struct OpenAIModel: LanguageModel {
     ///   from GPT-5.6 it groups their cache accounting. Pass one stable value per conversation,
     ///   never anything personal (a name, a key, the content). An OpenAI-compatible server that
     ///   does not know the field may refuse it, so leave it nil there.
-    /// - Parameter replaysReasoning: when true, each assistant message's `Message.reasoning` (when not empty) is sent back as
-    ///   `reasoning_content` on its wire message. DeepSeek's thinking mode REQUIRES it: once a request has tools, every later
-    ///   request must carry each earlier assistant message's `reasoning_content`, or it is refused with a 400 (without tools
-    ///   it is ignored). Off by default, so a caller that never sets it sends exactly the body it always did: a strict
-    ///   OpenAI-compatible server may refuse a message key it does not know. Never sent on a user, system or tool message.
+    /// - Parameter replaysReasoning: when true, each assistant message's `Message.reasoning` (when not empty) is sent
+    ///   back as `reasoning_content` on its wire message. DeepSeek's thinking mode REQUIRES it: once a request has
+    ///   tools, every later request must carry each earlier assistant message's `reasoning_content`, or it is refused
+    ///   with a 400 (without tools it is ignored). Off by default, so a caller that never sets it sends exactly the
+    ///   body it always did: a strict OpenAI-compatible server may refuse a message key it does not know. Never sent on
+    ///   a user, system or tool message.
+    /// - Parameter thinking: sent as `thinking: {type: …}` when set, omitted when nil (the default), so a server that
+    ///   does not know the field is never sent it.
     public init(
         model: String,
         credentialKey: String,
@@ -101,6 +117,7 @@ public struct OpenAIModel: LanguageModel {
         outputTokenField: OutputTokenField = .maxTokens,
         promptCacheKey: String? = nil,
         replaysReasoning: Bool = false,
+        thinking: ThinkingSwitch? = nil,
         transport: any HTTPTransport,
         credentials: any CredentialStore
     ) {
@@ -112,6 +129,7 @@ public struct OpenAIModel: LanguageModel {
         self.outputTokenField = outputTokenField
         self.promptCacheKey = promptCacheKey.flatMap { $0.isEmpty ? nil : $0 }
         self.replaysReasoning = replaysReasoning
+        self.thinking = thinking
         self.transport = transport
         self.credentials = credentials
     }
@@ -125,6 +143,7 @@ public struct OpenAIModel: LanguageModel {
         let outputTokenField = self.outputTokenField
         let promptCacheKey = self.promptCacheKey
         let replaysReasoning = self.replaysReasoning
+        let thinking = self.thinking
         let transport = self.transport
         let credentials = self.credentials
         return AsyncThrowingStream { continuation in
@@ -164,7 +183,8 @@ public struct OpenAIModel: LanguageModel {
                         reasoningEffort: reasoningEffort,
                         outputTokenField: outputTokenField,
                         promptCacheKey: promptCacheKey,
-                        replaysReasoning: replaysReasoning
+                        replaysReasoning: replaysReasoning,
+                        thinking: thinking
                     )
 
                     // Throw sites 3 (transport reachability), 4 (`.httpStatus` from the

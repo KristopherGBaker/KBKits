@@ -44,7 +44,7 @@ struct NeutralSurfaceTests {
             labels(ModelRequest(messages: []))
                 == ["messages", "tools", "responseSchema", "options", "webSearch"]
         )
-        #expect(labels(Message(role: .user, text: "x")) == ["role", "content", "reasoning"])
+        #expect(labels(Message(role: .user, text: "x")) == ["role", "content", "reasoning", "reasoningBlocks"])
         #expect(
             labels(ModelResponse(content: ""))
                 == ["content", "toolCalls", "finishReason", "usage", "webSearches", "citations", "reasoning"]
@@ -78,6 +78,9 @@ struct NeutralSurfaceTests {
         case .webSearchCall: break
         case .webSearchResult: break
         case .citation: break
+        // `.reasoningBlock` (Anthropic's signed thinking, kept to be sent back) is the SEVENTH deliberate guarded-enum
+        // update, enumerated explicitly for the same reason.
+        case .reasoningBlock: break
         case .completed: break
         }
         // `.image` is the THIRD deliberate guarded-enum update (after `reasoningDelta` and

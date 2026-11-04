@@ -41,19 +41,29 @@ public enum MessageContent: Sendable, Equatable, Codable {
 public struct Message: Sendable, Equatable, Codable {
     public var role: MessageRole
     public var content: [MessageContent]
-    /// The reasoning the model streamed (`ModelEvent.reasoningDelta`) while producing this ASSISTANT turn, or nil. It is a
-    /// field beside `content` rather than a fourth guarded `MessageContent` case on purpose: reasoning is not a part of the
-    /// answer and has no place in its order, and a field leaves every exhaustive switch over `MessageContent` (here and in
-    /// callers) untouched. Some providers need it sent back: DeepSeek's thinking mode answers a tool-using request with a 400
-    /// unless every earlier assistant message carries its `reasoning_content`. Only an adapter told to replay it does so
-    /// (`OpenAIModel(replaysReasoning:)`); every other adapter ignores it. Optional and nil by default, so a message without
-    /// it encodes exactly as before and JSON written before the field existed still decodes.
+    /// The reasoning the model streamed (`ModelEvent.reasoningDelta`) while producing this ASSISTANT turn, or nil. It
+    /// is a field beside `content` rather than a fourth guarded `MessageContent` case on purpose: reasoning is not a
+    /// part of the answer and has no place in its order, and a field leaves every exhaustive switch over
+    /// `MessageContent` (here and in callers) untouched. Some providers need it sent back: DeepSeek's thinking mode
+    /// answers a tool-using request with a 400 unless every earlier assistant message carries its `reasoning_content`.
+    /// Only an adapter told to replay it does so (`OpenAIModel(replaysReasoning:)`); every other adapter ignores it.
+    /// Optional and nil by default, so a message without it encodes exactly as before and JSON written before the field
+    /// existed still decodes.
     public var reasoning: String?
+    /// The provider's own reasoning blocks for this ASSISTANT turn, in the order they arrived
+    /// (`ModelEvent.reasoningBlock`), or nil. Anthropic signs each thinking block and asks for it back UNCHANGED, above
+    /// all within a tool loop, where it carries the reasoning behind the tool calls; only its adapter reads this, and
+    /// it sends the blocks before the turn's content. Optional and nil by default, like `reasoning`, so older JSON
+    /// decodes and a message without it encodes as before.
+    public var reasoningBlocks: [ReasoningBlock]?
 
-    public init(role: MessageRole, content: [MessageContent], reasoning: String? = nil) {
+    public init(
+        role: MessageRole, content: [MessageContent], reasoning: String? = nil, reasoningBlocks: [ReasoningBlock]? = nil
+    ) {
         self.role = role
         self.content = content
         self.reasoning = reasoning
+        self.reasoningBlocks = reasoningBlocks
     }
 
     /// The common case kept a one-liner: a plain-text turn is a single `.text` part, so
@@ -61,6 +71,15 @@ public struct Message: Sendable, Equatable, Codable {
     public init(role: MessageRole, text: String) {
         self.init(role: role, content: [.text(text)])
     }
+}
+
+/// One reasoning block exactly as the provider returned it, to be sent back with its turn. Anthropic's thinking blocks
+/// carry a `signature` over their text (which may be empty: a model whose thinking display is omitted streams none),
+/// and a redacted block carries only encrypted `data`; the API refuses either if it comes back modified, so both are
+/// kept verbatim.
+public enum ReasoningBlock: Sendable, Equatable, Codable {
+    case thinking(text: String, signature: String)
+    case redacted(data: String)
 }
 
 /// The input to a model call. Adapters translate this into their wire format; it
@@ -197,6 +216,10 @@ public enum ModelEvent: Sendable, Equatable {
     /// `ModelResponse.content`. Without it a reasoning model looks like a long hang
     /// followed by a sudden answer.
     case reasoningDelta(String)
+    /// A finished reasoning block for the caller to keep on the turn's `Message.reasoningBlocks` and send back
+    /// (Anthropic's signed thinking). Emitted when the block ends, after its `reasoningDelta`s; a caller that only
+    /// shows reasoning can ignore it. Only an adapter whose provider asks for its blocks back emits it.
+    case reasoningBlock(ReasoningBlock)
     case toolCall(ToolCallRecord)
     /// What the call consumed. Emitted AT MOST ONCE per call, immediately before
     /// `.completed`, even by providers that report usage in pieces across the stream
@@ -234,7 +257,8 @@ public struct ModelResponse: Sendable, Equatable {
     /// The sources the model cited, in order, each locating its span of `content`.
     public var citations: [WebSearchCitation]
     /// Every `.reasoningDelta` of the call, concatenated; empty when the model streamed none. Kept apart from `content`
-    /// (reasoning is not the answer) so a caller can put it on the assistant `Message` it appends (`Message.reasoning`).
+    /// (reasoning is not the answer) so a caller can put it on the assistant `Message` it appends
+    /// (`Message.reasoning`).
     public var reasoning: String
 
     public init(
@@ -300,6 +324,10 @@ public extension LanguageModel {
                     // Reasoning is not the answer, so it never joins the collected `content`;
                     // it is collected on its own into `ModelResponse.reasoning`.
                     reasoning += delta
+                case .reasoningBlock:
+                    // Kept only by a caller that sends a turn back (`Message.reasoningBlocks`); a one-off answer has
+                    // none.
+                    break
                 case .toolCall(let record):
                     toolCalls.append(record)
                 case .usage(let reported):

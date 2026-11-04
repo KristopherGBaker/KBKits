@@ -147,6 +147,7 @@ public struct AgentSession: Sendable {
 
             var turnText = ""
             var turnReasoning = ""
+            var turnReasoningBlocks: [ReasoningBlock] = []
             var turnCalls: [ToolCallRecord] = []
             var turnFinish: FinishReason?
             for try await event in model.stream(turnRequest) {
@@ -163,6 +164,10 @@ public struct AgentSession: Sendable {
                     // token, and a session that emits nothing meanwhile looks like a hang.
                     turnReasoning += delta
                     await emit(.reasoningDelta(delta))
+                case .reasoningBlock(let block):
+                    // Kept on the turn's message for the adapter that sends its blocks back (Anthropic's signed
+                    // thinking).
+                    turnReasoningBlocks.append(block)
                 case .toolCall(let call):
                     turnCalls.append(call)
                 case .usage(let reported):
@@ -187,7 +192,8 @@ public struct AgentSession: Sendable {
             if !turnText.isEmpty { assistantParts.append(.text(turnText)) }
             for call in turnCalls { assistantParts.append(.toolCall(call)) }
             messages.append(Message(
-                role: .assistant, content: assistantParts, reasoning: turnReasoning.isEmpty ? nil : turnReasoning
+                role: .assistant, content: assistantParts, reasoning: turnReasoning.isEmpty ? nil : turnReasoning,
+                reasoningBlocks: turnReasoningBlocks.isEmpty ? nil : turnReasoningBlocks
             ))
 
             for call in turnCalls {

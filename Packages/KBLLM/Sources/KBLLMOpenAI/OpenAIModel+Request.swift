@@ -19,7 +19,8 @@ extension OpenAIModel {
         reasoningEffort: ReasoningEffort?,
         outputTokenField: OutputTokenField,
         promptCacheKey: String? = nil,
-        replaysReasoning: Bool = false
+        replaysReasoning: Bool = false,
+        thinking: ThinkingSwitch? = nil
     ) throws -> HTTPRequestSpec {
         var body: [String: Any] = [
             "model": model,
@@ -87,6 +88,7 @@ extension OpenAIModel {
         }
         if !isGreedy, let topP = options.topP { body["top_p"] = topP }
         if let reasoningEffort { body["reasoning_effort"] = reasoningEffort.rawValue }
+        if let thinking { body["thinking"] = ["type": thinking.rawValue] }
         // Only when the caller asked: an absent key is the body this adapter always sent.
         if let promptCacheKey { body["prompt_cache_key"] = promptCacheKey }
         body["messages"] = try request.messages.flatMap { try messageJSON($0, replaysReasoning: replaysReasoning) }
@@ -195,8 +197,8 @@ extension OpenAIModel {
     /// neutral turn can expand to several wire messages (an assistant `tool_calls` message
     /// plus its text), which is why this returns an array the caller flat-maps.
     ///
-    /// `replaysReasoning` (`OpenAIModel(replaysReasoning:)`) adds an assistant message's reasoning as `reasoning_content`;
-    /// no other role ever carries it.
+    /// `replaysReasoning` (`OpenAIModel(replaysReasoning:)`) adds an assistant message's reasoning as
+    /// `reasoning_content`; no other role ever carries it.
     static func messageJSON(_ message: Message, replaysReasoning: Bool = false) throws -> [[String: Any]] {
         switch message.role {
         case .tool:
@@ -245,8 +247,8 @@ extension OpenAIModel {
         }
     }
 
-    /// `reasoning`, when not empty, rides as `reasoning_content`, exactly the text the model streamed, so a provider that
-    /// checks or caches it gets back the bytes it sent.
+    /// `reasoning`, when not empty, rides as `reasoning_content`, exactly the text the model streamed, so a provider
+    /// that checks or caches it gets back the bytes it sent.
     static func assistantMessage(_ content: [MessageContent], reasoning: String? = nil) throws -> [String: Any] {
         var toolCalls: [[String: Any]] = []
         for part in content {

@@ -193,7 +193,7 @@ struct WebSearchCollector {
             }
         case .citation(let citation):
             citations.append(citation)
-        case .contentDelta, .reasoningDelta, .toolCall, .usage, .completed:
+        case .contentDelta, .reasoningDelta, .reasoningBlock, .toolCall, .usage, .completed:
             break
         }
     }

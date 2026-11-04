@@ -71,6 +71,7 @@ func runStreamingCompletion() async -> Bool {
         for try await event in adapter.stream(request) {
             switch event {
             case .reasoningDelta(let text): print("  reasoning: \(text)")
+            case .reasoningBlock: print("  reasoningBlock")
             case .contentDelta(let text): print("  content: \(text)")
             case .toolCall(let call): print("  toolCall: \(call.name)")
             case .usage(let usage): print("  usage: \(usage.inputTokens) in, \(usage.outputTokens) out")

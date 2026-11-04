@@ -35,6 +35,9 @@ struct AnthropicResponseParser {
     /// Open text blocks, keyed by index, to where each began in the collected content, so a
     /// citation can name the span it covers once the block ends.
     private var textBlockStarts: [Int: Int] = [:]
+    /// Open thinking blocks, keyed by index: their text and signature so far, emitted whole as a `.reasoningBlock` when
+    /// the block stops, so a caller can send it back unchanged.
+    private var thinkingBlocks: [Int: (text: String, signature: String)] = [:]
     /// Citations seen inside an open text block, emitted with their range when it stops.
     private var pendingCitations: [Int: [WebSearchCitationSeed]] = [:]
     /// The collected content's length so far in UTF-16 code units, counted across calls.
@@ -167,6 +170,10 @@ struct AnthropicResponseParser {
             return searchResultEvents(block)
         case "text":
             textBlockStarts[index] = contentLength
+        case "thinking":
+            thinkingBlocks[index] = ("", "")
+        case "redacted_thinking":
+            if let data = block.data { return [.reasoningBlock(.redacted(data: data))] }
         default:
             break
         }
@@ -176,6 +183,11 @@ struct AnthropicResponseParser {
     private mutating func consumeBlockStop(_ index: Int) -> [ModelEvent] {
         // The structured block ends silently: its content was streamed as it arrived.
         if structuredBlocks.remove(index) != nil { return [] }
+        if let thinking = thinkingBlocks.removeValue(forKey: index) {
+            // A block without a signature cannot be sent back (the API would refuse it), so it is shown but not kept.
+            guard !thinking.signature.isEmpty else { return [] }
+            return [.reasoningBlock(.thinking(text: thinking.text, signature: thinking.signature))]
+        }
         if let search = searchBlocks.removeValue(forKey: index) {
             return [.webSearchCall(WebSearchCall(id: search.id, query: Self.query(of: search)))]
         }
@@ -218,8 +230,8 @@ struct AnthropicResponseParser {
         // A `thinking_delta` block carries the model's reasoning in its `thinking` field; it
         // maps to the neutral `.reasoningDelta`, never to `.contentDelta`, so reasoning is
         // surfaced as progress without ever joining the answer.
-        if delta.type == "thinking_delta", let thinking = delta.thinking {
-            return [.reasoningDelta(thinking)]
+        if delta.type == "thinking_delta" || delta.type == "signature_delta" {
+            return consumeThinking(delta, at: frame.index)
         }
         if delta.type == "citations_delta", let index = frame.index,
            let citation = delta.citation, let url = citation.url {
@@ -242,6 +254,16 @@ struct AnthropicResponseParser {
             }
         }
         return []
+    }
+
+    /// A thinking block's text, surfaced as it streams, and its signature, both kept for the block's `.reasoningBlock`.
+    private mutating func consumeThinking(_ delta: AnthropicFrame.Delta, at index: Int?) -> [ModelEvent] {
+        if let signature = delta.signature, let index {
+            thinkingBlocks[index]?.signature += signature
+        }
+        guard let thinking = delta.thinking else { return [] }
+        if let index { thinkingBlocks[index]?.text += thinking }
+        return [.reasoningDelta(thinking)]
     }
 
     /// Map Anthropic's stop reason, honouring the legacy structured route: a `tool_use` stop

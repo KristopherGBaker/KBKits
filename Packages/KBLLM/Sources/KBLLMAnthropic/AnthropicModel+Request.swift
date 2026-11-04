@@ -22,6 +22,22 @@ struct PausedTurn {
     }
 }
 
+/// The adapter's `thinking` and `effort`, carried together into the request builder.
+struct AnthropicReasoningSettings: Sendable {
+    var thinking: AnthropicThinking?
+    var effort: AnthropicEffort?
+
+    /// `thinking` as its own field, and `effort` inside `output_config` beside a structured request's `format`.
+    func add(to body: inout [String: Any]) {
+        if let thinking { body["thinking"] = thinking.json }
+        if let effort {
+            var config = body["output_config"] as? [String: Any] ?? [:]
+            config["effort"] = effort.rawValue
+            body["output_config"] = config
+        }
+    }
+}
+
 extension AnthropicModel {
     /// The basic search tool: direct searches, no code execution. Sent to every model the
     /// dynamic version is not documented for, and to any id this adapter cannot place.
@@ -37,7 +53,7 @@ extension AnthropicModel {
         profile.supportsDynamicWebSearch ? dynamicWebSearchToolType : basicWebSearchToolType
     }
 
-    // Six parameters on an internal builder with one call site, each a distinct value captured
+    // Seven parameters on an internal builder with one call site, each a distinct value captured
     // out of the struct before the escaping closure. Bundling two of them into a type that
     // exists only to satisfy a count would add indirection and explain nothing.
     // swiftlint:disable:next function_parameter_count
@@ -47,6 +63,7 @@ extension AnthropicModel {
         secret: String,
         endpoint: String,
         promptCaching: AnthropicPromptCaching,
+        reasoning: AnthropicReasoningSettings = AnthropicReasoningSettings(),
         pausedTurn: PausedTurn
     ) throws -> HTTPRequestSpec {
         let profile = AnthropicModelProfile(model)
@@ -88,6 +105,7 @@ extension AnthropicModel {
         if let schema = request.responseSchema {
             addStructuredOutput(schema, to: &body, profile: profile)
         }
+        reasoning.add(to: &body)
         // Tools render before the system prompt, so with no system prompt the last tool carries
         // the breakpoint that would have covered both.
         if promptCaching.cachesSystemPrompt, systemText.isEmpty,
@@ -121,7 +139,9 @@ extension AnthropicModel {
         // `encrypted_index`) that are base64 and full of `/`. Default serialization escapes
         // those as `\/`, which is the same JSON string but not the same bytes, so a search
         // request writes them verbatim. Every other request keeps the bytes it always had.
+        // Signed thinking blocks are sent back as received too.
         let verbatim = request.webSearch != nil || !pausedTurn.content.isEmpty
+            || request.messages.contains { !($0.reasoningBlocks ?? []).isEmpty }
         // Keys are sorted because a Swift dictionary's order follows a hash seed that changes
         // with every process: unsorted, the same request would have different bytes after a
         // relaunch, and a prompt-cache entry (a byte-prefix match) would never be read across
@@ -274,8 +294,19 @@ extension AnthropicModel {
         // A tool turn becomes a user turn carrying tool_result blocks, which is how the
         // Messages API models a tool's output.
         let role = message.role == .tool ? "user" : message.role.rawValue
-        let blocks = try message.content.map(contentBlock)
+        var blocks = try message.content.map(contentBlock)
+        // An assistant turn's thinking goes back unchanged, ahead of what it led to, as the model returned it.
+        if message.role == .assistant, let reasoning = message.reasoningBlocks {
+            blocks = reasoning.map(reasoningBlock) + blocks
+        }
         return ["role": role, "content": blocks]
+    }
+
+    private static func reasoningBlock(_ block: ReasoningBlock) -> [String: Any] {
+        switch block {
+        case let .thinking(text, signature): ["type": "thinking", "thinking": text, "signature": signature]
+        case let .redacted(data): ["type": "redacted_thinking", "data": data]
+        }
     }
 
     private static func contentBlock(_ part: MessageContent) throws -> [String: Any] {

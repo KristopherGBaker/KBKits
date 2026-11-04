@@ -98,6 +98,7 @@ public struct LoggingMiddleware: LanguageModelMiddleware {
         switch event {
         case .contentDelta(let delta): "delta " + delta
         case .reasoningDelta(let delta): "reasoning " + delta
+        case .reasoningBlock: "reasoningBlock"
         case .toolCall(let call): "toolCall " + call.name
         case .usage(let usage): "usage in=\(usage.inputTokens) out=\(usage.outputTokens)"
         case .webSearchCall(let call): "webSearch " + call.query
