@@ -74,6 +74,25 @@ import Testing
         #expect(input[4]["call_id"] as? String == "call_1")
         #expect(input[4]["output"] as? String == #"{"temp":"sunny"}"#)
         #expect(input[5]["content"] as? String == "Thanks")
+        #expect(input[5]["phase"] == nil, "a user message has no phase")
+    }
+
+    @Test func anAssistantTextCarriesItsPhaseCommentaryBeforeToolCallsAndFinalAnswerOtherwise() async throws {
+        let request = ModelRequest(messages: [
+            Message(role: .user, text: "Weather?"),
+            Message(role: .assistant, content: [.text("Checking."), .toolCall(Self.call)]),
+            Message(role: .tool, content: [
+                .toolResult(callID: "call_1", ToolResult.success(toolName: "get_weather", content: Data("{}".utf8)))
+            ]),
+            Message(role: .assistant, text: "Sunny."),
+            Message(role: .user, text: "Thanks")
+        ])
+        let (sent, _) = try await sent(request)
+        let input = try #require(sent["input"] as? [[String: Any]])
+        let assistant = input.filter { $0["role"] as? String == "assistant" }
+        #expect(assistant.map { $0["content"] as? String } == ["Checking.", "Sunny."])
+        #expect(assistant.map { $0["phase"] as? String } == ["commentary", "final_answer"])
+        #expect(input.filter { $0["type"] as? String == "function_call" }.allSatisfy { $0["phase"] == nil })
     }
 
     @Test func theReasoningItemGoesBackUnchangedAndOnlyOpenAIs() async throws {

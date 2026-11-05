@@ -106,6 +106,8 @@ extension OpenAIResponsesModel {
     /// One neutral message as Responses input items. A system message is `instructions`, not an item. An assistant
     /// turn expands to its own reasoning items first, then its text and its `function_call`s in the order the turn
     /// lists them, which is the order the model produced them; a tool turn is one `function_call_output` per result.
+    /// Each assistant text carries its `phase`, which newer models ask back on every assistant message: `commentary`
+    /// in a turn that calls tools (the model's words before its calls), `final_answer` in a turn that does not.
     static func inputItems(_ message: Message) throws -> [[String: Any]] {
         switch message.role {
         case .system:
@@ -117,7 +119,9 @@ extension OpenAIResponsesModel {
             }
         case .assistant:
             let reasoning = (message.reasoningBlocks ?? []).compactMap(reasoningItem)
-            return try reasoning + message.content.compactMap(assistantItem)
+            let callsTools = message.content.contains { if case .toolCall = $0 { true } else { false } }
+            let phase = callsTools ? "commentary" : "final_answer"
+            return try reasoning + message.content.compactMap { try assistantItem($0, phase: phase) }
         case .user:
             return [userItem(message.content)]
         }
@@ -135,11 +139,11 @@ extension OpenAIResponsesModel {
         ]
     }
 
-    private static func assistantItem(_ part: MessageContent) throws -> [String: Any]? {
+    private static func assistantItem(_ part: MessageContent, phase: String) throws -> [String: Any]? {
         switch part {
         case .text(let text):
             guard !text.isEmpty else { return nil }
-            return ["type": "message", "role": "assistant", "content": text]
+            return ["type": "message", "role": "assistant", "content": text, "phase": phase]
         case .toolCall(let record):
             return [
                 "type": "function_call",
