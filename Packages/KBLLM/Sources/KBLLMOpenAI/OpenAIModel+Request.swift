@@ -216,7 +216,8 @@ extension OpenAIModel {
             return try message.content.compactMap(toolResultMessage)
         case .assistant:
             let reasoning = replaysReasoning ? message.reasoning : nil
-            return try [assistantMessage(message.content, reasoning: reasoning)]
+            let extras = toolCallExtras(message.reasoningBlocks)
+            return try [assistantMessage(message.content, reasoning: reasoning, extras: extras)]
         default:
             // A turn carrying an image cannot flatten to a plain string: Chat Completions
             // takes multimodal content as an ORDERED ARRAY of parts, so the text and the
@@ -260,18 +261,34 @@ extension OpenAIModel {
 
     /// `reasoning`, when not empty, rides as `reasoning_content`, exactly the text the model streamed, so a provider
     /// that checks or caches it gets back the bytes it sent.
-    static func assistantMessage(_ content: [MessageContent], reasoning: String? = nil) throws -> [String: Any] {
+    /// Each tool call's `extra_content` as it came back (`ReasoningBlock.toolCallExtra`), by call id.
+    static func toolCallExtras(_ blocks: [ReasoningBlock]?) -> [String: Any] {
+        var extras: [String: Any] = [:]
+        for case let .toolCallExtra(callID, json) in blocks ?? [] {
+            if let object = try? JSONSerialization.jsonObject(with: Data(json.utf8), options: .fragmentsAllowed) {
+                extras[callID] = object
+            }
+        }
+        return extras
+    }
+
+    /// A tool call's `extras` entry (Gemini's thought signature) goes back on it as `extra_content`, unchanged.
+    static func assistantMessage(
+        _ content: [MessageContent], reasoning: String? = nil, extras: [String: Any] = [:]
+    ) throws -> [String: Any] {
         var toolCalls: [[String: Any]] = []
         for part in content {
             if case .toolCall(let record) = part {
                 // Validate arguments are JSON here (see `jsonString`), then carry them as
                 // the wire's argument STRING.
                 let arguments = try jsonString(from: record.arguments, toolID: record.id)
-                toolCalls.append([
+                var call: [String: Any] = [
                     "id": record.id,
                     "type": "function",
                     "function": ["name": record.name, "arguments": arguments]
-                ])
+                ]
+                if let extra = extras[record.id] { call["extra_content"] = extra }
+                toolCalls.append(call)
             }
         }
         var message: [String: Any] = ["role": "assistant", "content": joinedText(content)]

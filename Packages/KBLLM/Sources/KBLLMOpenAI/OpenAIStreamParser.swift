@@ -28,6 +28,8 @@ struct OpenAIResponseParser {
         var id: String
         var name: String
         var arguments: String
+        /// The call's `extra_content` (Gemini's thought signature), as JSON text, when the server sent one.
+        var extra: String?
     }
 
     mutating func consume(_ frame: SSEEvent) throws -> [ModelEvent] {
@@ -74,6 +76,7 @@ struct OpenAIResponseParser {
             events.append(.contentDelta(content))
         }
         accumulate(choice.delta?.toolCalls)
+        accumulateExtras(payload)
         if let reason = choice.finishReason {
             events.append(contentsOf: flush(reason))
         }
@@ -93,10 +96,29 @@ struct OpenAIResponseParser {
         }
     }
 
+    /// Each tool call delta's `extra_content` (Gemini's thought signature), read from the raw frame: the typed decoder
+    /// converts snake-case keys at every depth, and these must go back exactly as they came.
+    private mutating func accumulateExtras(_ payload: String) {
+        guard payload.contains("\"extra_content\""),
+              let frame = try? JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any],
+              let choice = (frame["choices"] as? [[String: Any]])?.first,
+              let calls = (choice["delta"] as? [String: Any])?["tool_calls"] as? [[String: Any]] else { return }
+        for call in calls {
+            let options: JSONSerialization.WritingOptions = [.sortedKeys, .fragmentsAllowed, .withoutEscapingSlashes]
+            guard let index = call["index"] as? Int, let extra = call["extra_content"], toolCalls[index] != nil,
+                  let data = try? JSONSerialization.data(withJSONObject: extra, options: options) else { continue }
+            toolCalls[index]?.extra = String(bytes: data, encoding: .utf8)
+        }
+    }
+
     private mutating func flush(_ reason: String) -> [ModelEvent] {
         var events: [ModelEvent] = []
         for index in order {
             guard let accumulator = toolCalls[index] else { continue }
+            // Before its call, so a caller keeping blocks has it when the turn goes back.
+            if let extra = accumulator.extra, !accumulator.id.isEmpty {
+                events.append(.reasoningBlock(.toolCallExtra(callID: accumulator.id, json: extra)))
+            }
             events.append(.toolCall(ToolCallRecord(
                 id: accumulator.id,
                 name: accumulator.name,

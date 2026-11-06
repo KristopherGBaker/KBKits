@@ -114,6 +114,8 @@ struct NeutralSurfaceTests {
         // `.openAIReasoning` (an OpenAI Responses reasoning item, kept to be sent back) is the EIGHTH deliberate
         // guarded-enum update, enumerated explicitly so a FURTHER undeclared block still fails to compile this target.
         case .openAIReasoning: break
+        // `.toolCallExtra` (a Chat Completions tool call's `extra_content`, Gemini's thought signature) is the NINTH.
+        case .toolCallExtra: break
         }
     }
 

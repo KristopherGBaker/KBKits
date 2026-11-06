@@ -308,7 +308,7 @@ extension AnthropicModel {
         switch block {
         case let .thinking(text, signature): ["type": "thinking", "thinking": text, "signature": signature]
         case let .redacted(data): ["type": "redacted_thinking", "data": data]
-        case .openAIReasoning: nil
+        case .openAIReasoning, .toolCallExtra: nil
         }
     }
 

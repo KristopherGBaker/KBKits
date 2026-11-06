@@ -86,6 +86,8 @@ public enum ReasoningBlock: Sendable, Equatable, Codable {
     /// reasoning itself, which a stateless `store: false` request can only carry this way) and its summary texts. The
     /// API asks for a tool loop's items back with the function calls they led to. A deliberate guarded-enum update.
     case openAIReasoning(id: String, encryptedContent: String, summary: [String])
+    /// A Chat Completions tool call's `extra_content` (JSON text) for `callID`, sent back as is (Gemini's signature).
+    case toolCallExtra(callID: String, json: String)
 }
 
 /// The input to a model call. Adapters translate this into their wire format; it
