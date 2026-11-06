@@ -52,7 +52,7 @@ extension OpenAIModel {
         // A schema no provider could honour (a negative `minItems`) is refused here, before
         // the transport is opened, by the one core check every adapter shares.
         try request.responseSchema?.validate()
-        for tool in request.tools { try tool.parameters.validate() }
+        for tool in request.tools { try tool.validate() }
         if !request.tools.isEmpty {
             body["tools"] = request.tools.map(toolJSON)
         }
@@ -119,7 +119,7 @@ extension OpenAIModel {
             "function": [
                 "name": tool.name,
                 "description": tool.description,
-                "parameters": schemaJSON(tool.parameters)
+                "parameters": tool.rawParametersJSON ?? schemaJSON(tool.parameters)
             ]
         ]
     }

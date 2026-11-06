@@ -197,7 +197,7 @@ extension AnthropicModel {
         // A schema no provider could honour (a negative `minItems`) is refused here, before
         // the transport is opened, by the one core check every adapter shares.
         try request.responseSchema?.validate()
-        for tool in request.tools { try tool.parameters.validate() }
+        for tool in request.tools { try tool.validate() }
     }
 
     /// Temperature and top-p are OMITTED when unset so Anthropic's own defaults hold; only
@@ -286,7 +286,7 @@ extension AnthropicModel {
         [
             "name": tool.name,
             "description": tool.description,
-            "input_schema": schemaJSON(tool.parameters)
+            "input_schema": tool.rawParametersJSON ?? schemaJSON(tool.parameters)
         ]
     }
 

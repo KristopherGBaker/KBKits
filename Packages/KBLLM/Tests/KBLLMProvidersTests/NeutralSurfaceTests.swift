@@ -39,7 +39,8 @@ struct NeutralSurfaceTests {
         // field still fails this guard.
         // `webSearch` (request) and `webSearches` + `citations` (response) are the web search
         // unit's deliberate additions, pinned the same way. `reasoning` (message and response)
-        // is the reasoning replay's (DeepSeek's thinking mode with tools).
+        // is the reasoning replay's (DeepSeek's thinking mode with tools). `rawParameters` (tool definition) is the raw
+        // schema's, for MCP tools whose schema `JSONSchema` cannot say.
         #expect(
             labels(ModelRequest(messages: []))
                 == ["messages", "tools", "responseSchema", "options", "webSearch"]
@@ -51,7 +52,7 @@ struct NeutralSurfaceTests {
         )
         #expect(
             labels(ToolDefinition(name: "n", description: "d", parameters: .string(description: nil)))
-                == ["name", "description", "parameters"]
+                == ["name", "description", "parameters", "rawParameters"]
         )
         #expect(
             labels(ToolCallRecord(id: "i", name: "n", arguments: Data()))

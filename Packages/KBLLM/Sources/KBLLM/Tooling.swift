@@ -155,11 +155,39 @@ public struct ToolDefinition: Sendable, Equatable {
     public let name: String
     public let description: String
     public let parameters: JSONSchema
+    /// The arguments' JSON Schema exactly as written, for a schema `parameters` cannot say (`oneOf`, `anyOf`, `$ref`,
+    /// `const`, a list of types…), such as an MCP server's `inputSchema`. The Anthropic and OpenAI adapters send it in
+    /// place of `parameters`; the Apple adapter, which builds a generation schema, cannot, and uses `parameters`, which
+    /// stays the fallback. It must be a JSON object whose `type` is `"object"`, or ``validate()`` refuses it as
+    /// `.invalidRequest`.
+    public let rawParameters: Data?
 
-    public init(name: String, description: String, parameters: JSONSchema) {
+    public init(name: String, description: String, parameters: JSONSchema, rawParameters: Data? = nil) {
         self.name = name
         self.description = description
         self.parameters = parameters
+        self.rawParameters = rawParameters
+    }
+
+    /// `rawParameters` as the JSON object an adapter sends; nil without one, or when it is not a JSON object (which
+    /// ``validate()`` refuses before any adapter gets this far).
+    public var rawParametersJSON: [String: Any]? {
+        rawParameters.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+    }
+
+    /// `parameters`' rules, and a `rawParameters` that is a JSON object of `type` `"object"`. Every adapter that sends
+    /// `rawParameters` runs this before it opens a transport.
+    public func validate() throws(KBLLMError) {
+        try parameters.validate()
+        guard rawParameters != nil else { return }
+        guard let raw = rawParametersJSON else {
+            throw KBLLMError.invalidRequest(field: "tools.\(name).rawParameters", reason: "must be a JSON object")
+        }
+        guard raw["type"] as? String == "object" else {
+            throw KBLLMError.invalidRequest(
+                field: "tools.\(name).rawParameters", reason: "must be a schema whose type is \"object\""
+            )
+        }
     }
 }
 

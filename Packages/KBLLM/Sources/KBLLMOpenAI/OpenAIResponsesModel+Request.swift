@@ -73,7 +73,7 @@ extension OpenAIResponsesModel {
             )
         }
         try request.responseSchema?.validate()
-        for tool in request.tools { try tool.parameters.validate() }
+        for tool in request.tools { try tool.validate() }
     }
 
     /// Sampling controls only when set, greedy as `temperature: 0` winning over a temperature or top-p, and the
@@ -98,7 +98,7 @@ extension OpenAIResponsesModel {
             "type": "function",
             "name": tool.name,
             "description": tool.description,
-            "parameters": OpenAIModel.schemaJSON(tool.parameters),
+            "parameters": tool.rawParametersJSON ?? OpenAIModel.schemaJSON(tool.parameters),
             "strict": false
         ]
     }
