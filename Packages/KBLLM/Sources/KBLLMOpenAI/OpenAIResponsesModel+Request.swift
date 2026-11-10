@@ -50,9 +50,10 @@ extension OpenAIResponsesModel {
         if let summary = options.reasoningSummary { reasoning["summary"] = summary.rawValue }
         if !reasoning.isEmpty { body["reasoning"] = reasoning }
         if let promptCacheKey = options.promptCacheKey { body["prompt_cache_key"] = promptCacheKey }
-        var headers = extraHeaders
-        headers["Authorization"] = "Bearer \(secret)"
-        headers["content-type"] = "application/json"
+        // The headers are `OpenAIModel`'s, shared rather than copied, so the two OpenAI wires keep the same rules:
+        // the adapter's own headers win over a caller's `extraHeaders` in any letter case, and an empty secret
+        // sends no Authorization header at all (a keyless server, or one keyed by a caller header of its own).
+        let headers = OpenAIModel.requestHeaders(secret: secret, extraHeaders: extraHeaders)
         return HTTPRequestSpec(method: .post, url: endpoint, headers: headers, body: try serialize(body))
     }
 

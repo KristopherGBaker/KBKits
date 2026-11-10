@@ -82,7 +82,9 @@ public struct OpenAIResponsesModel: LanguageModel {
     /// Neither `model` nor `credentialKey` is defaulted, for the reason `OpenAIModel`'s are not.
     /// - Parameter baseURL: the API root INCLUDING the version segment, to which `/responses` is appended.
     /// - Parameter extraHeaders: additional headers sent with every request; the Authorization and content-type
-    ///   headers this adapter sets itself always win.
+    ///   headers this adapter sets itself always win, in any letter case, so a caller cannot accidentally replace
+    ///   the credential it just supplied. An empty secret from the store sends no Authorization header (a keyless
+    ///   server, or one that takes its key in a header the caller passes here), as on `OpenAIModel`.
     /// - Parameter reasoningEffort: `reasoning.effort`, omitted when nil.
     /// - Parameter reasoningSummary: `reasoning.summary`, omitted when nil.
     /// - Parameter promptCacheKey: `prompt_cache_key`, omitted when nil or empty.
