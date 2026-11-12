@@ -22,12 +22,7 @@ public struct AnthropicModelList: ModelListing {
     }
 
     public func listModels() async throws -> [ListedModel] {
-        let secret: String
-        do {
-            secret = try await credentials.secret(forKey: credentialKey)
-        } catch {
-            throw KBLLMError.missingCredential(key: credentialKey)
-        }
+        let secret = try await credentials.resolvedSecret(forKey: credentialKey)
         let headers = ["x-api-key": secret, "anthropic-version": "2023-06-01", "accept": "application/json"]
         var models: [ListedModel] = []
         var after: String?

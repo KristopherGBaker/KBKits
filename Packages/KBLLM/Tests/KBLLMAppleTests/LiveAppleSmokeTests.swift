@@ -37,7 +37,7 @@ struct LiveAppleSmokeTests {
             let expected = FoundationModelCapability.set(from: PrivateCloudComputeLanguageModel().capabilities)
             #expect(pcc.capabilities == expected)
         } else {
-            #expect(pcc is PrivateCloudComputeUnsupportedBackend || pcc is PrivateCloudComputeUnentitledBackend)
+            #expect(pcc is UnavailableFoundationModelBackend)
             #expect(pcc.capabilities.isEmpty)
         }
         let quota = await bounded { pcc.quotaUsage }

@@ -99,7 +99,7 @@ public struct AnthropicModel: LanguageModel {
                 // URL actually used, not the default.
                 let endpoint: String
                 do {
-                    endpoint = try Self.composeEndpoint(baseURL)
+                    endpoint = try AdapterPlumbing.composeEndpoint(base: baseURL, suffix: Self.pathSuffix)
                 } catch {
                     continuation.finish(throwing: KBLLMError.from(error))
                     return
@@ -108,14 +108,9 @@ public struct AnthropicModel: LanguageModel {
                 // message can be redacted before it reaches a `.transport` value.
                 var secret: String?
                 do {
-                    let key: String
-                    do {
-                        key = try await credentials.secret(forKey: credentialKey)
-                    } catch {
-                        // Throw site 1: the store could not supply the key. The caller's
-                        // key names what to configure; the store's raw error never escapes.
-                        throw KBLLMError.missingCredential(key: credentialKey)
-                    }
+                    // Throw site 1: the store could not supply the key (`.missingCredential`
+                    // naming the caller's key; the store's raw error never escapes).
+                    let key = try await credentials.resolvedSecret(forKey: credentialKey)
                     secret = key
 
                     // A structured answer arrives as text on the structured-outputs route, or, on
@@ -196,7 +191,7 @@ public struct AnthropicModel: LanguageModel {
                 } catch {
                     // A foreign transport failure is reachability. Redact the secret in case
                     // the host stitched it into the underlying message.
-                    let underlying = Self.redact(String(describing: error), secret: secret)
+                    let underlying = AdapterPlumbing.redact(String(describing: error), secret: secret)
                     continuation.finish(throwing: KBLLMError.transport(url: endpoint, underlying: underlying))
                 }
             }
@@ -228,67 +223,4 @@ public struct AnthropicModel: LanguageModel {
     /// Internal (not public) so the closed public surface is unchanged, yet a `@testable` test
     /// can key its fixture's block name to this exact value.
     static let structuredToolName = "structured_response"
-
-    /// Compose the endpoint from the base URL and validate it. A base that cannot form a
-    /// valid URL is rejected as `.invalidRequest` naming the base, rather than concatenated
-    /// into a broken request the transport would fail on opaquely.
-    private static func composeEndpoint(_ baseURL: String) throws -> String {
-        let endpoint = baseURL + pathSuffix
-        guard URL(string: endpoint) != nil else {
-            throw KBLLMError.invalidRequest(field: "baseURL", reason: "malformed base URL: \(baseURL)")
-        }
-        return endpoint
-    }
-
-    /// Replace any occurrence of the secret with a fixed marker so a host-supplied error
-    /// message can never smuggle the key into a `.transport` value.
-    private static func redact(_ text: String, secret: String?) -> String {
-        guard let secret, !secret.isEmpty else { return text }
-        return text.replacingOccurrences(of: secret, with: "[redacted]")
-    }
-}
-
-/// Retains a bounded prefix of a byte stream so the adapter can name a fragment of the raw
-/// body when a 2xx drain yields zero usable events (the observed unknown-path case: a 200
-/// whose body is an error object, not an event stream). Reference-typed and lock-guarded so
-/// the tapping task and the draining task share one buffer safely.
-private final class BodyPrefix: @unchecked Sendable {
-    private let lock = NSLock()
-    private var bytes: [UInt8] = []
-    private let limit = 512
-
-    func append(_ byte: UInt8) {
-        lock.lock()
-        defer { lock.unlock() }
-        if bytes.count < limit { bytes.append(byte) }
-    }
-
-    var fragment: String {
-        lock.lock()
-        defer { lock.unlock() }
-        return String(bytes: bytes, encoding: .utf8) ?? ""
-    }
-}
-
-/// Forward a byte stream unchanged while retaining a bounded prefix in `prefix`, so the SSE
-/// parser sees an ordinary byte sequence and the adapter can still describe the raw body if
-/// the drain produced nothing usable. A free function so the drain loop reads as one line.
-private func tapping(
-    _ upstream: AsyncThrowingStream<UInt8, any Error>,
-    into prefix: BodyPrefix
-) -> AsyncThrowingStream<UInt8, any Error> {
-    AsyncThrowingStream { continuation in
-        let task = Task {
-            do {
-                for try await byte in upstream {
-                    prefix.append(byte)
-                    continuation.yield(byte)
-                }
-                continuation.finish()
-            } catch {
-                continuation.finish(throwing: error)
-            }
-        }
-        continuation.onTermination = { _ in task.cancel() }
-    }
 }

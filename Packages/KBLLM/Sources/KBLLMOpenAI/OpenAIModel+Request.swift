@@ -92,7 +92,10 @@ extension OpenAIModel {
         // Only when the caller asked: an absent key is the body this adapter always sent.
         if let promptCacheKey { body["prompt_cache_key"] = promptCacheKey }
         body["messages"] = try request.messages.flatMap { try messageJSON($0, replaysReasoning: replaysReasoning) }
-        let data = try serialize(body)
+        // Sorted keys, so the same request is the same bytes in every process (a Swift dictionary's order is
+        // per-process): a provider caching prompt prefixes (OpenAI, DeepSeek) and a test comparing two requests see
+        // one stable body.
+        let data = try AdapterPlumbing.serialize(body, options: [.sortedKeys])
         let headers = requestHeaders(secret: secret, extraHeaders: extraHeaders)
         return HTTPRequestSpec(method: .post, url: endpoint, headers: headers, body: data)
     }
@@ -328,22 +331,5 @@ extension OpenAIModel {
             )
         }
         return String(data: data, encoding: .utf8) ?? ""
-    }
-
-    /// Sorted keys, so the same request is the same bytes in every process (a Swift dictionary's order is per-process):
-    /// a provider caching prompt prefixes (OpenAI, DeepSeek) and a test comparing two requests see one stable body.
-    static func serialize(_ object: [String: Any]) throws -> Data {
-        do {
-            return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        } catch {
-            throw KBLLMError.invalidRequest(field: "body", reason: "request body could not be serialized")
-        }
-    }
-
-    /// Replace any occurrence of the secret with a fixed marker so a host-supplied error
-    /// message can never smuggle the key into a `.transport` value.
-    static func redact(_ text: String, secret: String?) -> String {
-        guard let secret, !secret.isEmpty else { return text }
-        return text.replacingOccurrences(of: secret, with: "[redacted]")
     }
 }

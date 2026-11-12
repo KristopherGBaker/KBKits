@@ -54,7 +54,10 @@ extension OpenAIResponsesModel {
         // the adapter's own headers win over a caller's `extraHeaders` in any letter case, and an empty secret
         // sends no Authorization header at all (a keyless server, or one keyed by a caller header of its own).
         let headers = OpenAIModel.requestHeaders(secret: secret, extraHeaders: extraHeaders)
-        return HTTPRequestSpec(method: .post, url: endpoint, headers: headers, body: try serialize(body))
+        // Sorted keys, so the same request is the same bytes in every process and the prompt cache sees one prefix,
+        // and unescaped slashes, so an `encrypted_content` (base64, full of `/`) goes back as the bytes that arrived.
+        let data = try AdapterPlumbing.serialize(body, options: [.sortedKeys, .withoutEscapingSlashes])
+        return HTTPRequestSpec(method: .post, url: endpoint, headers: headers, body: data)
     }
 
     /// Every refusal that must happen before a request leaves, the same ones `OpenAIModel` makes.
@@ -174,15 +177,5 @@ extension OpenAIResponsesModel {
             }
         }
         return ["type": "message", "role": "user", "content": parts]
-    }
-
-    /// Sorted keys, so the same request is the same bytes in every process and the prompt cache sees one prefix, and
-    /// unescaped slashes, so an `encrypted_content` (base64, full of `/`) goes back as the bytes that arrived.
-    static func serialize(_ object: [String: Any]) throws -> Data {
-        do {
-            return try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
-        } catch {
-            throw KBLLMError.invalidRequest(field: "body", reason: "request body could not be serialized")
-        }
     }
 }

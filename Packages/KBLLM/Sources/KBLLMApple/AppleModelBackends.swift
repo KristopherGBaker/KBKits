@@ -40,40 +40,35 @@ public enum AppleModelBackends {
     ) -> any FoundationModelBackend {
         #if canImport(FoundationModels)
         if isSupported, #available(macOS 27, iOS 27, *) {
-            guard isEntitled() else { return PrivateCloudComputeUnentitledBackend() }
+            guard isEntitled() else { return UnavailableFoundationModelBackend(reason: unentitledReason) }
             return LivePrivateCloudComputeBackend()
         }
         #endif
-        return PrivateCloudComputeUnsupportedBackend()
+        return UnavailableFoundationModelBackend(reason: unsupportedReason)
     }
+
+    /// Why the pre-macOS 27 stand-in is unavailable.
+    static let unsupportedReason = "Private Cloud Compute requires macOS 27 or later"
+
+    /// Why the macOS 27 stand-in for a process without the entitlement is unavailable.
+    static let unentitledReason =
+        "Private Cloud Compute needs the com.apple.developer.private-cloud-compute entitlement"
 }
 
-/// The pre-macOS 27 Private Cloud Compute stand-in: unavailable, no capabilities, and a run
-/// that throws the same `.unavailable` rather than attempting anything.
-struct PrivateCloudComputeUnsupportedBackend: FoundationModelBackend {
-    static let reason = "Private Cloud Compute requires macOS 27 or later"
+/// A backend that is not there: unavailable for `reason`, no capabilities, and a run that
+/// throws the same `.unavailable` rather than attempting anything. It touches no
+/// FoundationModels API (asking the live Private Cloud Compute model anything unentitled
+/// traps), so it is declared outside any framework guard and answers wherever the module builds.
+struct UnavailableFoundationModelBackend: FoundationModelBackend {
+    let reason: String
 
-    var availability: FoundationModelAvailability { .unavailable(reason: Self.reason) }
+    var availability: FoundationModelAvailability { .unavailable(reason: reason) }
 
     var capabilities: Set<FoundationModelCapability> { [] }
 
     func run(_ request: ModelRequest) -> AsyncThrowingStream<FoundationModelChunk, any Error> {
-        AsyncThrowingStream { $0.finish(throwing: KBLLMError.unavailable(reason: Self.reason)) }
-    }
-}
-
-/// The macOS 27 Private Cloud Compute stand-in for a process without the entitlement:
-/// unavailable, no capabilities, and a run that throws the same `.unavailable`. It touches no
-/// FoundationModels API, since asking the live model anything unentitled traps.
-struct PrivateCloudComputeUnentitledBackend: FoundationModelBackend {
-    static let reason = "Private Cloud Compute needs the com.apple.developer.private-cloud-compute entitlement"
-
-    var availability: FoundationModelAvailability { .unavailable(reason: Self.reason) }
-
-    var capabilities: Set<FoundationModelCapability> { [] }
-
-    func run(_ request: ModelRequest) -> AsyncThrowingStream<FoundationModelChunk, any Error> {
-        AsyncThrowingStream { $0.finish(throwing: KBLLMError.unavailable(reason: Self.reason)) }
+        let reason = self.reason
+        return AsyncThrowingStream { $0.finish(throwing: KBLLMError.unavailable(reason: reason)) }
     }
 }
 

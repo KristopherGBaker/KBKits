@@ -156,7 +156,7 @@ public struct OpenAIModel: LanguageModel {
                 // URL actually used, not the default.
                 let endpoint: String
                 do {
-                    endpoint = try Self.composeEndpoint(baseURL)
+                    endpoint = try AdapterPlumbing.composeEndpoint(base: baseURL, suffix: Self.pathSuffix)
                 } catch {
                     continuation.finish(throwing: KBLLMError.from(error))
                     return
@@ -165,14 +165,9 @@ public struct OpenAIModel: LanguageModel {
                 // message can be redacted before it reaches a `.transport` value.
                 var secret: String?
                 do {
-                    let key: String
-                    do {
-                        key = try await credentials.secret(forKey: credentialKey)
-                    } catch {
-                        // Throw site 1: the store could not supply the key. The caller's
-                        // key names what to configure; the store's raw error never escapes.
-                        throw KBLLMError.missingCredential(key: credentialKey)
-                    }
+                    // Throw site 1: the store could not supply the key (`.missingCredential`
+                    // naming the caller's key; the store's raw error never escapes).
+                    let key = try await credentials.resolvedSecret(forKey: credentialKey)
                     secret = key
 
                     // Throw site 2: building the provider body (`.invalidRequest`).
@@ -243,7 +238,7 @@ public struct OpenAIModel: LanguageModel {
                 } catch {
                     // A foreign transport failure is reachability. Redact the secret in case
                     // the host stitched it into the underlying message.
-                    let underlying = Self.redact(String(describing: error), secret: secret)
+                    let underlying = AdapterPlumbing.redact(String(describing: error), secret: secret)
                     continuation.finish(throwing: KBLLMError.transport(url: endpoint, underlying: underlying))
                 }
             }
@@ -257,16 +252,4 @@ public struct OpenAIModel: LanguageModel {
     /// The `json_schema.name` a structured request carries. OpenAI requires the block to be
     /// named; the value is not otherwise significant, so one stable label serves every request.
     static let structuredSchemaName = "structured_response"
-
-    /// Compose the endpoint from the base URL and validate it. A base that cannot form a
-    /// valid URL is rejected as `.invalidRequest` naming the base, rather than concatenated
-    /// into a broken request the transport would fail on opaquely.
-    private static func composeEndpoint(_ baseURL: String) throws -> String {
-        let endpoint = baseURL + pathSuffix
-        guard URL(string: endpoint) != nil else {
-            throw KBLLMError.invalidRequest(field: "baseURL", reason: "malformed base URL: \(baseURL)")
-        }
-        return endpoint
-    }
-
 }

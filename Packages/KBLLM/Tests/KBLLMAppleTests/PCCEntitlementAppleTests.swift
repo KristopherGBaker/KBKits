@@ -6,10 +6,14 @@ import Testing
 // Private Cloud Compute is live only on macOS 27 AND for a process signed with its entitlement,
 // because an unentitled live request traps inside FoundationModels. The factory's branches are
 // driven here with an injected entitlement answer, the raw-value decision with real CF values,
-// and the public factory in this (unentitled) test process. No test here runs a live backend:
-// the live type is only ever checked with `is`, and a run happens only after a type guard has
-// confirmed a stand-in.
+// the public factory in this (unentitled) test process, and the one stand-in both refusals use,
+// directly, with each reason. No test here runs a live backend: the live type is only ever
+// checked with `is`, and a run happens only after a type guard has confirmed a stand-in.
 @Suite struct PCCEntitlementAppleTests {
+    static let unsupportedReason = "Private Cloud Compute requires macOS 27 or later"
+    static let unentitledReason =
+        "Private Cloud Compute needs the com.apple.developer.private-cloud-compute entitlement"
+
     @Test func supportedAndEntitledIsTheLiveBackend() async throws {
         let backend = AppleModelBackends.privateCloudCompute(isSupported: true, isEntitled: { true })
         #if canImport(FoundationModels)
@@ -18,11 +22,7 @@ import Testing
             return
         }
         #endif
-        try await expectStandIn(
-            backend,
-            is: PrivateCloudComputeUnsupportedBackend.self,
-            reason: "Private Cloud Compute requires macOS 27 or later"
-        )
+        try await expectStandIn(backend, reason: Self.unsupportedReason)
     }
 
     @Test func supportedButUnentitledIsTheEntitlementStandIn() async throws {
@@ -32,21 +32,11 @@ import Testing
             return false
         })
         guard Self.osSupportsPCC else {
-            try await expectStandIn(
-                backend,
-                is: PrivateCloudComputeUnsupportedBackend.self,
-                reason: "Private Cloud Compute requires macOS 27 or later"
-            )
+            try await expectStandIn(backend, reason: Self.unsupportedReason)
             return
         }
         #expect(asked == 1)
-        #expect(PrivateCloudComputeUnentitledBackend.reason
-            == "Private Cloud Compute needs the com.apple.developer.private-cloud-compute entitlement")
-        try await expectStandIn(
-            backend,
-            is: PrivateCloudComputeUnentitledBackend.self,
-            reason: "Private Cloud Compute needs the com.apple.developer.private-cloud-compute entitlement"
-        )
+        try await expectStandIn(backend, reason: Self.unentitledReason)
     }
 
     @Test func unsupportedAndEntitledIsThePre27StandIn() async throws {
@@ -57,11 +47,7 @@ import Testing
         })
         // The OS is checked first: an unsupported OS never consults the entitlement.
         #expect(asked == 0)
-        try await expectStandIn(
-            backend,
-            is: PrivateCloudComputeUnsupportedBackend.self,
-            reason: "Private Cloud Compute requires macOS 27 or later"
-        )
+        try await expectStandIn(backend, reason: Self.unsupportedReason)
     }
 
     @Test func unsupportedAndUnentitledIsThePre27StandIn() async throws {
@@ -71,11 +57,20 @@ import Testing
             return false
         })
         #expect(asked == 0)
-        try await expectStandIn(
-            backend,
-            is: PrivateCloudComputeUnsupportedBackend.self,
-            reason: "Private Cloud Compute requires macOS 27 or later"
-        )
+        try await expectStandIn(backend, reason: Self.unsupportedReason)
+    }
+
+    /// The factory's two reasons are the strings the documentation promises, word for word.
+    @Test func theFactoryPassesEachDocumentedReason() {
+        #expect(AppleModelBackends.unsupportedReason == Self.unsupportedReason)
+        #expect(AppleModelBackends.unentitledReason == Self.unentitledReason)
+    }
+
+    /// The stand-in itself, built directly with each reason on any runner: it reports and refuses
+    /// with exactly the reason it was given, so the two refusals differ only by that string.
+    @Test(arguments: [PCCEntitlementAppleTests.unsupportedReason, PCCEntitlementAppleTests.unentitledReason])
+    func theUnavailableStandInAnswersWithTheReasonItWasGiven(reason: String) async throws {
+        try await expectStandIn(UnavailableFoundationModelBackend(reason: reason), reason: reason)
     }
 
     #if canImport(Darwin)
@@ -103,27 +98,11 @@ import Testing
         #expect(PrivateCloudComputeEntitlement.isGranted() == false)
 
         let backend = AppleModelBackends.privateCloudCompute()
-        if Self.osSupportsPCC {
-            guard backend is PrivateCloudComputeUnentitledBackend else {
-                Issue.record("expected the entitlement stand-in, got \(type(of: backend)); not running it")
-                return
-            }
-            try await expectStandIn(
-                backend,
-                is: PrivateCloudComputeUnentitledBackend.self,
-                reason: "Private Cloud Compute needs the com.apple.developer.private-cloud-compute entitlement"
-            )
-        } else {
-            guard backend is PrivateCloudComputeUnsupportedBackend else {
-                Issue.record("expected the pre-27 stand-in, got \(type(of: backend)); not running it")
-                return
-            }
-            try await expectStandIn(
-                backend,
-                is: PrivateCloudComputeUnsupportedBackend.self,
-                reason: "Private Cloud Compute requires macOS 27 or later"
-            )
+        guard backend is UnavailableFoundationModelBackend else {
+            Issue.record("expected a stand-in, got \(type(of: backend)); not running it")
+            return
         }
+        try await expectStandIn(backend, reason: Self.osSupportsPCC ? Self.unentitledReason : Self.unsupportedReason)
         #endif
     }
 
@@ -135,19 +114,18 @@ import Testing
         return false
     }
 
-    /// A stand-in is exactly `StandIn`, reports `.unavailable(reason:)` with no capabilities, no
-    /// quota and no context size, and refuses a run (through `AppleModel` and called directly)
-    /// with that same `.unavailable` and no events. Call only once the type is known to be a
-    /// stand-in: this RUNS the backend.
-    private func expectStandIn<StandIn: FoundationModelBackend>(
+    /// A stand-in is exactly `UnavailableFoundationModelBackend`, reports
+    /// `.unavailable(reason:)` with no capabilities, no quota and no context size, and refuses a
+    /// run (through `AppleModel` and called directly) with that same `.unavailable` and no
+    /// events. Call only once the type is known to be a stand-in: this RUNS the backend.
+    private func expectStandIn(
         _ backend: any FoundationModelBackend,
-        is _: StandIn.Type,
         reason: String,
         sourceLocation: SourceLocation = #_sourceLocation
     ) async throws {
-        guard backend is StandIn else {
+        guard backend is UnavailableFoundationModelBackend else {
             Issue.record(
-                "expected \(StandIn.self), got \(type(of: backend)); not running it",
+                "expected UnavailableFoundationModelBackend, got \(type(of: backend)); not running it",
                 sourceLocation: sourceLocation
             )
             return
@@ -162,15 +140,21 @@ import Testing
         #expect(result.error == .unavailable(reason: reason), sourceLocation: sourceLocation)
         #expect(result.events.isEmpty, sourceLocation: sourceLocation)
 
-        #expect(await drain(backend, request) == .unavailable(reason: reason), sourceLocation: sourceLocation)
+        let direct = await drain(backend, request)
+        #expect(direct.chunks == 0, sourceLocation: sourceLocation)
+        #expect(direct.error == .unavailable(reason: reason), sourceLocation: sourceLocation)
     }
 
-    private func drain(_ backend: any FoundationModelBackend, _ request: ModelRequest) async -> KBLLMError? {
+    /// Run a backend directly: how many chunks it yielded and the error it finished with.
+    private func drain(_ backend: any FoundationModelBackend, _ request: ModelRequest) async -> (
+        chunks: Int, error: KBLLMError?
+    ) {
+        var chunks = 0
         do {
-            for try await _ in backend.run(request) {}
-            return nil
+            for try await _ in backend.run(request) { chunks += 1 }
+            return (chunks, nil)
         } catch {
-            return KBLLMError.from(error)
+            return (chunks, KBLLMError.from(error))
         }
     }
 }

@@ -146,7 +146,9 @@ extension AnthropicModel {
         // with every process: unsorted, the same request would have different bytes after a
         // relaunch, and a prompt-cache entry (a byte-prefix match) would never be read across
         // launches or between separate runs sharing one prompt.
-        let data = try serialize(body, options: verbatim ? [.sortedKeys, .withoutEscapingSlashes] : [.sortedKeys])
+        let data = try AdapterPlumbing.serialize(
+            body, options: verbatim ? [.sortedKeys, .withoutEscapingSlashes] : [.sortedKeys]
+        )
         return HTTPRequestSpec(
             method: .post,
             url: endpoint,
@@ -363,17 +365,6 @@ extension AnthropicModel {
                 field: "toolCall(\(toolID)).arguments",
                 reason: "tool call arguments must be valid JSON before dispatch"
             )
-        }
-    }
-
-    private static func serialize(
-        _ object: [String: Any],
-        options: JSONSerialization.WritingOptions
-    ) throws -> Data {
-        do {
-            return try JSONSerialization.data(withJSONObject: object, options: options)
-        } catch {
-            throw KBLLMError.invalidRequest(field: "body", reason: "request body could not be serialized")
         }
     }
 }

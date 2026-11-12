@@ -30,12 +30,7 @@ public struct OpenAIModelList: ModelListing {
         guard URL(string: endpoint) != nil else {
             throw KBLLMError.invalidRequest(field: "baseURL", reason: "malformed models URL: \(endpoint)")
         }
-        let secret: String
-        do {
-            secret = try await credentials.secret(forKey: credentialKey)
-        } catch {
-            throw KBLLMError.missingCredential(key: credentialKey)
-        }
+        let secret = try await credentials.resolvedSecret(forKey: credentialKey)
         var headers = OpenAIModel.requestHeaders(secret: secret, extraHeaders: extraHeaders)
         headers["content-type"] = nil
         if !headers.keys.contains(where: { $0.lowercased() == "accept" }) { headers["accept"] = "application/json" }

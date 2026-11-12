@@ -124,19 +124,14 @@ public struct OpenAIResponsesModel: LanguageModel {
                 // `.invalidRequest` without opening the transport and the `.transport` catch names the URL used.
                 let endpoint: String
                 do {
-                    endpoint = try Self.composeEndpoint(baseURL)
+                    endpoint = try AdapterPlumbing.composeEndpoint(base: baseURL, suffix: Self.pathSuffix)
                 } catch {
                     continuation.finish(throwing: KBLLMError.from(error))
                     return
                 }
                 var secret: String?
                 do {
-                    let key: String
-                    do {
-                        key = try await credentials.secret(forKey: credentialKey)
-                    } catch {
-                        throw KBLLMError.missingCredential(key: credentialKey)
-                    }
+                    let key = try await credentials.resolvedSecret(forKey: credentialKey)
                     secret = key
                     let spec = try Self.buildRequest(
                         request, model: model, secret: key, endpoint: endpoint,
@@ -151,7 +146,7 @@ public struct OpenAIResponsesModel: LanguageModel {
                 } catch {
                     // A foreign transport failure is reachability; the secret is redacted in case the host stitched
                     // it into the message.
-                    let underlying = OpenAIModel.redact(String(describing: error), secret: secret)
+                    let underlying = AdapterPlumbing.redact(String(describing: error), secret: secret)
                     continuation.finish(throwing: KBLLMError.transport(url: endpoint, underlying: underlying))
                 }
             }
@@ -186,12 +181,4 @@ public struct OpenAIResponsesModel: LanguageModel {
 
     /// The fixed provider path appended onto the caller's base URL.
     private static let pathSuffix = "/responses"
-
-    private static func composeEndpoint(_ baseURL: String) throws -> String {
-        let endpoint = baseURL + pathSuffix
-        guard URL(string: endpoint) != nil else {
-            throw KBLLMError.invalidRequest(field: "baseURL", reason: "malformed base URL: \(baseURL)")
-        }
-        return endpoint
-    }
 }
