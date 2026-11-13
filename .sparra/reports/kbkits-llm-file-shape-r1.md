@@ -54,3 +54,142 @@ four documentation edits).
 | Public API: `swift package diagnose-api-breaking-changes` in a standalone repository (first commit the merge base's `Packages/KBLLM`, working tree `94558f0`'s) | exit 0, "No breaking changes detected" in all seven modules |
 | `git diff -M --stat <merge base>` | `JSONSchema.swift` +149, `Tooling.swift` −148, `Seams.swift` +2, `MacroSupport.swift` 6 (±3), `KBLLMRuntime.swift` +4, `KBLLMTesting.swift` +4: 6 files |
 | Silverpoint `make build` against this tree (temporary Silverpoint worktree at main, `KBKits` linked to this unit's worktree) | exit 0 |
+
+## The API comparison's full output (verify 10, after round 1's verdict)
+
+`swift package diagnose-api-breaking-changes <base commit>` in the standalone repository, against `94558f0`'s working tree; exit 0. Its whole log, all 132 lines, unedited except that the scratch folder's path is shortened to `<scratch>`:
+
+```
+Fetching https://github.com/swiftlang/swift-syntax.git from cache
+Fetched https://github.com/swiftlang/swift-syntax.git from cache (0.62s)
+Computing version for https://github.com/swiftlang/swift-syntax.git
+Computed https://github.com/swiftlang/swift-syntax.git at 603.0.2 (1.07s)
+Creating working copy for https://github.com/swiftlang/swift-syntax.git
+Working copy of https://github.com/swiftlang/swift-syntax.git resolved at 603.0.2
+warning: 'f2b1e41f4c132b1f4453fcdcc090be9d00cbf332-checkout': found 1 file(s) which are unhandled; explicitly declare them as resources or exclude from the target
+    <scratch>/api.PQtt/KBLLM/.build/out/apidiff/f2b1e41f4c132b1f4453fcdcc090be9d00cbf332-checkout/Sources/KBLLM/KBLLM.docc
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 1026]
+[Planning deferred tasks]
+[177 / 414]
+[186 / 434]
+[228 / 447] SwiftSyntax600
+[244 / 448]
+[260 / 448] SwiftSyntax603
+[260 / 448] SwiftSyntax
+[267 / 476]
+[273 / 476]
+[276 / 476]
+[277 / 476]
+[290 / 476] SwiftSyntax
+[299 / 479] SwiftBasicFormat
+[308 / 510] SwiftParser
+[313 / 510] SwiftDiagnostics
+[320 / 510] SwiftBasicFormat
+[328 / 510] SwiftParser
+[329 / 510] SwiftParser
+[330 / 510] SwiftParser
+[331 / 510] SwiftParser
+[336 / 510] SwiftParser
+[343 / 510] SwiftOperators
+[348 / 510]
+[350 / 512] SwiftParser
+[363 / 536] SwiftParserDiagnostics
+[370 / 536] SwiftParserDiagnostics
+[380 / 536] SwiftParserDiagnostics
+[383 / 536]
+[390 / 537] SwiftOperators
+[391 / 537] SwiftSyntaxBuilder
+[395 / 559]
+[398 / 559]
+[400 / 559]
+[412 / 559] SwiftSyntaxBuilder
+[414 / 559] SwiftSyntaxBuilder
+[422 / 560] SwiftIfConfig
+[435 / 573] SwiftIfConfig
+[442 / 574] SwiftIfConfig
+[455 / 587] SwiftSyntaxMacros
+[464 / 588] SwiftSyntaxMacroExpansion
+[474 / 598] SwiftSyntaxMacroExpansion
+[475 / 598] SwiftSyntaxMacroExpansion
+[481 / 599] SwiftCompilerPluginMessageHandling
+[495 / 612] SwiftCompilerPluginMessageHandling
+[502 / 613] SwiftCompilerPluginMessageHandling
+[505 / 615] SwiftCompilerPlugin
+[512 / 615] SwiftSyntax
+[517 / 615] SwiftDiagnostics
+[523 / 615] SwiftSyntaxMacroExpansion
+[533 / 616] KBLLMMacrosPlugin
+[538 / 633]
+[541 / 633]
+[543 / 633]
+[544 / 633]
+[550 / 633] KBLLMMacrosPlugin
+[551 / 633] KBLLMMacrosPlugin
+[553 / 633] KBLLMMacrosPlugin
+[558 / 636] KBLLMMacros
+[567 / 637] KBLLM
+[580 / 650] KBLLM
+[592 / 656]
+[592 / 656] KBLLM
+[603 / 666] KBLLMURLSession
+[612 / 707] KBLLMURLSession
+[641 / 707] KBLLMOpenAI
+[657 / 707] KBLLMRuntime
+[662 / 707] KBLLMOpenAI
+[670 / 707] KBLLMAnthropic
+[678 / 707] KBLLMTesting
+[689 / 707] KBLLMRuntime
+[702 / 707] KBLLMApple
+[703 / 707] KBLLMApple
+[706 / 707] KBLLMApple
+Build complete! (16.49 sec)
+Building for debugging...
+[Computing dependencies]
+[Pre-planning 1 / 472]
+[Planning deferred tasks]
+[74 / 157]
+[75 / 158] KBLLMMacrosPlugin
+[85 / 201]
+[90 / 201]
+[95 / 201]
+[96 / 201]
+[100 / 201]
+[103 / 201]
+[109 / 201]
+[111 / 201]
+[112 / 201]
+[119 / 201] KBLLMMacrosPlugin
+[121 / 201] KBLLMMacrosPlugin
+[126 / 204] KBLLMMacros
+[135 / 205] KBLLM
+[148 / 218] KBLLM
+[160 / 224] KBLLM
+[171 / 235] KBLLMRuntime
+[192 / 249] KBLLMAnthropic
+[208 / 275] KBLLMOpenAI
+[222 / 275] KBLLMOpenAI-product
+[234 / 275] KBLLMAnthropic-product
+[241 / 275]
+[250 / 275]
+[261 / 275] KBLLMApple
+[270 / 275] KBLLMApple
+[271 / 275] KBLLMApple
+[274 / 275] KBLLMApple
+Build complete! (7.28 sec)
+
+No breaking changes detected in KBLLM
+
+No breaking changes detected in KBLLMAnthropic
+
+No breaking changes detected in KBLLMApple
+
+No breaking changes detected in KBLLMOpenAI
+
+No breaking changes detected in KBLLMRuntime
+
+No breaking changes detected in KBLLMTesting
+
+No breaking changes detected in KBLLMURLSession
+```
