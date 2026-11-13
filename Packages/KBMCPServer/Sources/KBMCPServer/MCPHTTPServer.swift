@@ -58,24 +58,17 @@ public final class MCPHTTPServer: Sendable {
 
         let logger = self.logger
         let state = await withCheckedContinuation { (continuation: CheckedContinuation<State, Never>) in
-            let resumed = Mutex(false)
-            let resumeOnce: @Sendable (State) -> Void = { state in
-                let first = resumed.withLock { done -> Bool in
-                    defer { done = true }
-                    return !done
-                }
-                if first { continuation.resume(returning: state) }
-            }
+            let resume = Self.resumeOnce(continuation)
             newListener.stateUpdateHandler = { [weak newListener] state in
                 switch state {
                 case .ready:
-                    resumeOnce(.running(port: newListener?.port?.rawValue ?? port))
+                    resume(.running(port: newListener?.port?.rawValue ?? port))
                 case .failed(let error), .waiting(let error):
                     // A waiting listener retries forever; report it rather than hang `start`.
                     logger.error("MCP listener failed: \(error.localizedDescription, privacy: .public)")
-                    resumeOnce(.failed(Self.describe(error, port: port)))
+                    resume(.failed(Self.describe(error, port: port)))
                 case .cancelled:
-                    resumeOnce(.stopped)
+                    resume(.stopped)
                 default:
                     break
                 }
@@ -107,21 +100,29 @@ public final class MCPHTTPServer: Sendable {
         }
         guard let current else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let resumed = Mutex(false)
-            let resumeOnce: @Sendable () -> Void = {
-                let first = resumed.withLock { done -> Bool in
-                    defer { done = true }
-                    return !done
-                }
-                if first { continuation.resume() }
-            }
+            let resume = Self.resumeOnce(continuation)
             let previous = current.stateUpdateHandler
             current.stateUpdateHandler = { state in
                 previous?(state)
-                if case .cancelled = state { resumeOnce() }
+                if case .cancelled = state { resume(()) }
             }
             current.cancel()
-            queue.asyncAfter(deadline: .now() + 2) { resumeOnce() }
+            queue.asyncAfter(deadline: .now() + 2) { resume(()) }
+        }
+    }
+
+    /// Wraps `continuation` in a closure that resumes it with the first value it is given;
+    /// later calls do nothing. Listener callbacks can race, and a continuation resumes once.
+    private static func resumeOnce<T: Sendable>(
+        _ continuation: CheckedContinuation<T, Never>
+    ) -> @Sendable (T) -> Void {
+        let resumed = Mutex(false)
+        return { value in
+            let first = resumed.withLock { done -> Bool in
+                defer { done = true }
+                return !done
+            }
+            if first { continuation.resume(returning: value) }
         }
     }
 
