@@ -56,9 +56,12 @@ CONTRACT: AGREED
 The report names the core function and its file on two lines of their own, `Core function: <name>` and
 `Core file: <path>`. Steps 4 and 5 then run as written here, from the worktree root:
 
-4. `R=.sparra/reports/kbkits-llm-neutral-validation-r1.md; FN=$(sed -n 's/^Core function: *`\{0,1\}\([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' "$R" | head -1); test -n "$FN" && for f in Packages/KBLLM/Sources/KBLLMOpenAI/OpenAIModel+Request.swift Packages/KBLLM/Sources/KBLLMOpenAI/OpenAIResponsesModel+Request.swift Packages/KBLLM/Sources/KBLLMAnthropic/AnthropicModel+Request.swift Packages/KBLLM/Sources/KBLLMApple/AppleModel.swift; do rg -q "\b$FN\(" "$f" || { echo "NO CALL: $f"; exit 1; }; done; echo "ALL FOUR CALL $FN"`
+4. `R=.sparra/reports/kbkits-llm-neutral-validation-r1.md; FN=$(sed -n 's/^Core function: *`\{0,1\}\([A-Za-z_][A-Za-z0-9_]*\).*/\1/p' "$R" | head -1); { test -n "$FN" || exit 1; } && for f in Packages/KBLLM/Sources/KBLLMOpenAI/OpenAIModel+Request.swift Packages/KBLLM/Sources/KBLLMOpenAI/OpenAIResponsesModel+Request.swift Packages/KBLLM/Sources/KBLLMAnthropic/AnthropicModel+Request.swift Packages/KBLLM/Sources/KBLLMApple/AppleModel.swift; do rg -q "\b$FN\(" "$f" || { echo "NO CALL: $f"; exit 1; }; done; echo "ALL FOUR CALL $FN"`
    → prints `ALL FOUR CALL <name>`, exit 0.
 5. `R=.sparra/reports/kbkits-llm-neutral-validation-r1.md; CF=$(sed -n 's/^Core file: *`\{0,1\}\([^` ]*\).*/\1/p' "$R" | head -1); test -f "$CF" && case "$CF" in Packages/KBLLM/Sources/KBLLM/*) ;; *) exit 1;; esac && rg -n "func $FN\b" "$CF" && ! rg -q '\bpublic\b' "$CF" && echo "NO PUBLIC IN $CF"`
    (with `FN` from step 4) → the declaration line shows `package` (or narrower) and the command prints `NO PUBLIC IN <path>`,
    exit 0. If the function sits in an existing core file that already holds `public` declarations, the judge instead reads
    the declaration line and confirms the report's public-API comparison (assertion 14) shows no change.
+
+Round 3's point: step 4 now fails closed. `{ test -n "$FN" || exit 1; }` stops it with exit 1 when the report or its
+`Core function:` line is missing, before any call check runs, and `ALL FOUR CALL` prints only after all four files pass.
