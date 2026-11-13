@@ -104,4 +104,6 @@ public protocol ClockSource: Sendable {
 /// The randomness seam. Randomness is injected (idempotency keys, jitter) so a seeded
 /// generator makes a run reproducible. Refines the standard generator so it drops into
 /// `Int.random(in:using:)` and friends.
+///
+/// No KBLLM code draws randomness yet: the seam exists for callers and for future retry jitter.
 public protocol RandomSource: RandomNumberGenerator, Sendable {}

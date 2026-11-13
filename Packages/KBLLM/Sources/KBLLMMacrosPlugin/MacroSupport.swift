@@ -79,9 +79,6 @@ enum MacroSupport {
         }
     }
 
-    /// Build the `JSONSchema` factory expression for a Swift type, sourcing the
-    /// description from the doc comment. Falls back to `.string` for shapes the client
-    /// does not model, so an unknown type still yields a valid schema.
     /// Whether a written type is optional, and the type it wraps.
     ///
     /// Both spellings, because both appear in real code and a `count: Int?` that maps to a
@@ -118,6 +115,9 @@ enum MacroSupport {
         "Bool", "String", "Character"
     ]
 
+    /// Build the `JSONSchema` factory expression for a Swift type, sourcing the
+    /// description from the doc comment. Falls back to `.string` for shapes the client
+    /// does not model, so an unknown type still yields a valid schema.
     static func schemaExpression(for type: String, description: String?) -> String {
         // An optional describes whether the property is REQUIRED, not what type it holds, so
         // the wrapper is stripped here and the caller decides the required list.
