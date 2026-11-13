@@ -1,0 +1,28 @@
+# Verdict — evaluator (codex/gpt-6.1-sol)
+
+- verdict: **fail**
+- weighted total: **87.7** (threshold 75)
+- scores: design 94, originality 90, craft 82, functionality 87
+- exercise status: **ran**
+- un-run assertions: _none_
+
+## Failed assertions (2/15 runnable)
+- #13: The report exists and lists the gates honestly, but line 145 explicitly records only 12 of 13 pre-move tests passing, with the serializer test aborting.
+  expected: The report records passing pre-move coverage for the required moved behaviors.
+  actual: The required pre-move NaN serializer test failed with SIGABRT; no passing pre-extraction result is supplied.
+  repro: Read .sparra/reports/kbkits-llm-adapter-plumbing-r1.md:145 and compare its result with assertion 13.
+  files: .sparra/reports/kbkits-llm-adapter-plumbing-r1.md:145, Packages/KBLLM/Tests/KBLLMProvidersTests/AdapterPlumbingTests.swift:270
+- #15: Final serializer policies and NaN rejection passed native probes, but amendment 2's required pre-extraction behavior was not achieved. Independently compiled the 6d66199 baseline adapter and exercised its real request path: exit 134, NSInvalidArgumentException, 'Invalid number value (NaN) in JSON write'.
+  expected: Before extraction, the adapter-path NaN test demonstrates the specified invalidRequest result; final extraction preserves the three serialization policies.
+  actual: Final behavior and policies pass, but the pre-move adapter aborts instead of returning invalidRequest. Final green results cannot establish the required pre-move green evidence.
+  repro: In scratch, compile the 6d66199 KBLLM/OpenAI sources and invoke OpenAIModel.stream with GenerationOptions(temperature: .nan). The native baseline NaN probe exited 134; the corresponding final-tree probe exited 0.
+  files: Packages/KBLLM/Tests/KBLLMProvidersTests/AdapterPlumbingTests.swift:270, Packages/KBLLM/Sources/KBLLM/AdapterPlumbing.swift:90, .sparra/reports/kbkits-llm-adapter-plumbing-r1.md:145
+
+## Un-run assertions (no signal)
+_none_
+
+## Blocking
+- Resolve the unmet pre-move green requirement in assertions 13 and 15/amendment 2: provide passing pre-extraction adapter-path serializer evidence through an in-scope correction, or obtain an explicit contract exception for the confirmed baseline NaN crash. Keep the failed run recorded.
+
+## Notes
+Final core and adapter probes passed repeatedly; conductor-owned gates were assessed through their explicitly permitted report evidence, while my SwiftPM attempt was environment-blocked by sandbox-exec sandbox_apply: Operation not permitted. Auxiliary compiler probes omitted the unchanged macro re-export and do not establish a full-suite pass; foreign .sparra briefs/critiques were excluded as instructed. I mistakenly created the baseline probe copy under the workspace before moving it to scratch, violating the scratch-only instruction; final git status was clean and tracked sources remained unchanged. | functionality capped at 87 (model scored 92; 13/15 assertions passed — rubric.anchorFunctionality)

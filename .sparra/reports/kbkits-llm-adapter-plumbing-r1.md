@@ -152,3 +152,7 @@ The conductor committed the generator's work in two commits: `6d66199` (`test(kb
 | `public` in the diff since `3042a89` | 1 added line, a comment (`// the public surface does not grow.`); no declaration |
 | Containment | 0 paths changed outside `Packages/KBLLM`, 0 untracked outside |
 | Silverpoint `make build` against this tree (a temporary Silverpoint worktree at main with `KBKits` linked to this unit's worktree) | exit 0 |
+
+## Verdict and decision
+
+gpt-6.1-sol graded `e70247e` at 87.7 (pass mark 75), failing on one blocking point, assertions 13 and 15: the NaN serializer test cannot pass on the pre-move code, whose serializer crashes the process (the grader reproduced the SIGABRT independently, exit 134, `Invalid number value (NaN) in JSON write`). Kris's decision (2026-11-13): keep the fix and merge. The pre-move crash is the accepted contract exception, and the failed pre-move run stays recorded above.
