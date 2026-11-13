@@ -64,3 +64,14 @@ therefore settled by reading the diff, not by more shell plumbing:
 2. **Silverpoint's build is binding (point 4).** Assertion 11 is strengthened: the conductor's Silverpoint `make build`
    against the changed package must exit 0. A refusal or an environment block is recorded as UN-RUN and is a gate not
    met, not a pass.
+
+## Amendment 2 (conductor, after critique round 3)
+
+1. **Failure propagation.** Verify 4, 10 and 13 run under `set -o pipefail` in one shell, and each starts with
+   `MB=$(git merge-base HEAD main) && test -n "$MB" &&` before its first use of `$MB`; a failed producer then fails the
+   step.
+2. **Final worktree content.** Amendment 1's review reads the final worktree, committed or not:
+   `MB=$(git merge-base HEAD main) && test -n "$MB" && git diff -M "$MB"` (the working tree against the merge base: commits,
+   staged and unstaged edits) and, for each path `git ls-files --others --exclude-standard` lists that is not present at
+   `main`, its contents (`git diff --no-index /dev/null <path>`). The allowed set, the report exception and the treatment
+   of conductor metadata are as Amendment 1 says.

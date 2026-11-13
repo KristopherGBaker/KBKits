@@ -1,0 +1,5 @@
+Round 2 #3 is resolved by the explicit human diff review; #4 is resolved by making Silverpoint’s build binding. Two required changes remain:
+
+1. **Finish failure propagation (Round 2 #1).** The amendment retains verify #4/#10 pipelines without producer-failure propagation and verify #13’s unchecked merge-base substitution. `&&` does not catch failures inside pipelines; a probe confirmed `false | sed ...` returns 0. Enable pipeline failure propagation and separately validate #13’s merge-base assignment, or replace these checks with equivalent direct evidence review.
+
+2. **Review final worktree content (Round 2 #2).** `git diff ... main...HEAD` excludes staged and unstaged edits; `git status` lists paths without exposing their contents. Thus the amendment still cannot establish its restricted-diff assertion for uncommitted work, which the brief expressly permits. Review the tracked worktree diff against a validated merge-base, plus the contents of item-delivered untracked files. Keep the exact-report exception and exclude conductor metadata through the baseline. Do not require commits or a clean tree.
