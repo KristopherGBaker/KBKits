@@ -1,0 +1,11 @@
+Round 1’s assignment syntax, standalone API setup, and explicit `git diff -M --stat` command are fixed. F5–F8 match the named survey. Remaining required changes:
+
+1. **Finish failure propagation (Round 1 #1).** Checks #9, #11, and #12 can still turn a producer’s exit 1 into success through `; rc=$?; test "$rc" -eq 1`. I reproduced that control flow returning 0 after `false`. Pipelines in #4/#10 and the untracked sweep also lack producer-failure propagation. Abort on producer errors; accept exit 1 only from the intended no-match check. Check #13 must separately validate its merge-base assignment.
+
+2. **Finish scope coverage (Round 1 #2).** The untracked sweep still exempts all `.sparra/`, contrary to the requested exact-report exception, and #11 ignores untracked package files. Cover all item-delivered content, allowing only the exact report outside the package. Exclude pre-existing conductor metadata through an appropriate baseline—not by permitting arbitrary new `.sparra/` deliverables. The current tracked scope command already fails on existing harness metadata.
+
+3. **Require the actual restricted diff (Round 1 #2/#3).** Six permitted filenames plus doc-only checks do not establish “solely the requested edits.” Arbitrary implementation changes inside `Tooling.swift` still pass those checks; untracked additions also escape the claimed no-additions proof. Add a numbered human diff-review assertion: `Tooling.swift` changes only by removing the schema block; `JSONSchema.swift` contains that verbatim block plus necessary imports/header; the four documentation files contain only the specified edits; everything else is unchanged. This also completes the API-unchanged argument without new tests or audit scripts.
+
+4. **Make Silverpoint’s result binding (Round 1 #5).** Assertion 11 requires recording `make build`, but permits recording a failure and still satisfying acceptance. Explicitly require the conductor’s build against the changed package to succeed when executed; record refusal/environment-blocking as UN-RUN. Keep execution conductor-owned.
+
+Round 1 #4 is resolved by restoring the explicit move-stat evidence. Swift tests, the standalone API procedure, and Silverpoint’s build were not executed here; no successful execution is claimed.
