@@ -1,0 +1,23 @@
+# Verdict — evaluator (codex/gpt-6.1-sol)
+
+- verdict: **pass**
+- weighted total: **94.6** (threshold 75)
+- scores: design 95, originality 92, craft 95, functionality 95
+- exercise status: **mixed**
+- un-run assertions: #3
+
+## Failed assertions (0/5 runnable)
+_none_
+
+## Un-run assertions (no signal)
+- #3: UN-RUN locally due to environment. In an unchanged scratch copy, set -o pipefail; swift test --package-path Packages/KBMCPServer 2>&1 | xcbeautify -qq exited 1 during manifest compilation, before tests executed; no second test attempt was made. An unfiltered manifest diagnostic reported compiler-cache output denied with 'Operation not permitted' and 'unable to load standard library'. The committed report records two conductor runs exiting 0 with 57 tests; git diff c5390d1 HEAD -- Packages/KBMCPServer produced no differences.
+  expected: Two consecutive foreground suite runs exit 0 with zero failures, with results recorded.
+  actual: Local compilation was environment-blocked; the contract-authorized conductor evidence records both required successful runs.
+  repro: Copy Packages/KBMCPServer into a scratch root preserving its relative path; run set -o pipefail; swift test --package-path Packages/KBMCPServer 2>&1 | xcbeautify -qq.
+  files: Packages/KBMCPServer/Package.swift:1, .sparra/reports/kbkits-mcpserver-resume-once-r1.md:60
+
+## Blocking
+_none_
+
+## Notes
+No artifact defect found; assertion 3 is locally UN-RUN because compiler-cache writes were denied, and no harness-observed execution is claimed. The agreed contract accepts the committed conductor evidence, which records two green suites and Silverpoint build against package content unchanged here. This artifact is a library package with no CLI executable, so CLI flag probes do not apply.
