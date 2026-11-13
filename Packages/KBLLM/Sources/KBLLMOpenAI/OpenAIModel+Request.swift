@@ -22,6 +22,11 @@ extension OpenAIModel {
         replaysReasoning: Bool = false,
         thinking: ThinkingSwitch? = nil
     ) throws -> HTTPRequestSpec {
+        // The neutral refusals, before the transport is opened. Server-side web search is not
+        // something Chat Completions offers, so a request asking for it is refused; so is
+        // RULING 19's schema-plus-tools (OpenAI could only satisfy one) and a schema no provider
+        // could honour.
+        try request.validateNeutralRules(supportsWebSearch: false)
         var body: [String: Any] = [
             "model": model,
             "stream": true,
@@ -31,28 +36,6 @@ extension OpenAIModel {
             // never offered, and a server that does not implement it ignores the key.
             "stream_options": ["include_usage": true]
         ]
-        // Server-side web search is not something Chat Completions offers, so a request that
-        // asks for it is refused rather than answered without searching, which would hand the
-        // caller stale knowledge dressed as a researched answer.
-        if request.webSearch != nil {
-            throw KBLLMError.invalidRequest(
-                field: "webSearch",
-                reason: "this model does not support server-side web search (supportsWebSearch is false)"
-            )
-        }
-        // RULING 19: a request cannot ask for BOTH structured output and caller tools. OpenAI
-        // could only satisfy one, so honouring the other silently would drop what the caller
-        // asked for; reject it before dispatch instead, naming both fields.
-        if request.responseSchema != nil, !request.tools.isEmpty {
-            throw KBLLMError.invalidRequest(
-                field: "responseSchema+tools",
-                reason: "responseSchema and tools cannot be combined in one request"
-            )
-        }
-        // A schema no provider could honour (a negative `minItems`) is refused here, before
-        // the transport is opened, by the one core check every adapter shares.
-        try request.responseSchema?.validate()
-        for tool in request.tools { try tool.validate() }
         if !request.tools.isEmpty {
             body["tools"] = request.tools.map(toolJSON)
         }

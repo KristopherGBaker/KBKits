@@ -161,19 +161,25 @@ extension AnthropicModel {
         )
     }
 
-    /// Every refusal that must happen before a request leaves, in one place.
+    /// Every refusal that must happen before a request leaves, in one place: the core's neutral
+    /// rules, with Anthropic's own run between RULING 19 and the schema walk.
+    ///
+    /// Anthropic searches server-side, so a `webSearch` request is not refused here. RULING 19
+    /// holds as on every adapter: on the legacy route the synthetic structured tool would sit
+    /// among the caller's tools, and it is kept on the structured-outputs route too, so one
+    /// request means the same thing on every model.
     private static func validate(_ request: ModelRequest, model: String, profile: AnthropicModelProfile) throws {
-        // RULING 19: a request cannot ask for BOTH structured output and caller tools. On the
-        // legacy route the synthetic structured tool would sit among the caller's tools, so
-        // honouring one silently would drop the other; reject it before dispatch instead,
-        // naming both fields. Kept on the structured-outputs route too, so one request means
-        // the same thing on every model.
-        if request.responseSchema != nil, !request.tools.isEmpty {
-            throw KBLLMError.invalidRequest(
-                field: "responseSchema+tools",
-                reason: "responseSchema and tools cannot be combined in one request"
-            )
+        try request.validateNeutralRules(supportsWebSearch: true) { () throws(KBLLMError) in
+            try validateProviderRules(request, model: model, profile: profile)
         }
+    }
+
+    /// Anthropic's own refusals, which win over a schema the neutral walk would refuse.
+    private static func validateProviderRules(
+        _ request: ModelRequest,
+        model: String,
+        profile: AnthropicModelProfile
+    ) throws(KBLLMError) {
         // Search results come back cited, and the API rejects citations alongside a structured
         // output format, so the two cannot share a request. Refused rather than quietly
         // unsearched: the caller would get an answer it believes was researched.
@@ -196,10 +202,6 @@ extension AnthropicModel {
             )
         }
         try request.webSearch?.validate()
-        // A schema no provider could honour (a negative `minItems`) is refused here, before
-        // the transport is opened, by the one core check every adapter shares.
-        try request.responseSchema?.validate()
-        for tool in request.tools { try tool.validate() }
     }
 
     /// Temperature and top-p are OMITTED when unset so Anthropic's own defaults hold; only

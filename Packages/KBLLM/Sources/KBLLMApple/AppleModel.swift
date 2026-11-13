@@ -171,29 +171,16 @@ public struct AppleModel: LanguageModel {
 
     /// The typed refusal for a request that must never reach the backend, or `nil` to proceed.
     ///
-    /// RULING 19: structured output and caller tools cannot be combined, so both fields are
-    /// named rather than one silently dropped. Then the schemas go through the same core
-    /// ``JSONSchema/validate()`` the HTTP adapters call before their transport opens, so a
-    /// negative `minItems` in the `responseSchema` or any tool's `parameters` is refused here
-    /// exactly as it is there. A helper rather than inline so `stream` stays one readable body.
+    /// The core's neutral refusals, the same the HTTP adapters make: FoundationModels has no
+    /// server-side search, on device or on Private Cloud Compute, so a request asking for one is
+    /// refused rather than answered from the model's own memory; RULING 19's schema-plus-tools
+    /// names both fields rather than silently dropping one; and a negative `minItems` in the
+    /// `responseSchema` or any tool's `parameters` is refused exactly as it is there. The walk
+    /// stops at `parameters`: FoundationModels is never sent a tool's `rawParameters`. A helper
+    /// rather than inline so `stream` stays one readable body.
     private static func preDispatchRefusal(for request: ModelRequest) -> KBLLMError? {
-        // FoundationModels has no server-side search, on device or on Private Cloud Compute, so
-        // a request asking for one is refused rather than answered from the model's own memory.
-        if request.webSearch != nil {
-            return .invalidRequest(
-                field: "webSearch",
-                reason: "this model does not support server-side web search (supportsWebSearch is false)"
-            )
-        }
-        if request.responseSchema != nil, !request.tools.isEmpty {
-            return .invalidRequest(
-                field: "responseSchema+tools",
-                reason: "responseSchema and tools cannot be combined in one request"
-            )
-        }
         do {
-            try request.responseSchema?.validate()
-            for tool in request.tools { try tool.parameters.validate() }
+            try request.validateNeutralRules(supportsWebSearch: false, toolWalk: .parametersOnly)
         } catch {
             return error
         }

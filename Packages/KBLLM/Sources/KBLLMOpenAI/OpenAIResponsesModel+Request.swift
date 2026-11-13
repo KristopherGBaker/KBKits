@@ -17,7 +17,10 @@ extension OpenAIResponsesModel {
         extraHeaders: [String: String],
         options: Options
     ) throws -> HTTPRequestSpec {
-        try validate(request)
+        // Every refusal that must happen before a request leaves, the same ones `OpenAIModel` makes. OpenAI's own
+        // web search tool is a different tool family this adapter does not speak, so a request asking for search is
+        // refused rather than answered unsearched.
+        try request.validateNeutralRules(supportsWebSearch: false)
         var body: [String: Any] = [
             "model": model,
             "stream": true,
@@ -58,26 +61,6 @@ extension OpenAIResponsesModel {
         // and unescaped slashes, so an `encrypted_content` (base64, full of `/`) goes back as the bytes that arrived.
         let data = try AdapterPlumbing.serialize(body, options: [.sortedKeys, .withoutEscapingSlashes])
         return HTTPRequestSpec(method: .post, url: endpoint, headers: headers, body: data)
-    }
-
-    /// Every refusal that must happen before a request leaves, the same ones `OpenAIModel` makes.
-    private static func validate(_ request: ModelRequest) throws {
-        // OpenAI's own web search tool is a different tool family this adapter does not speak, so a request asking
-        // for search is refused rather than answered unsearched.
-        if request.webSearch != nil {
-            throw KBLLMError.invalidRequest(
-                field: "webSearch",
-                reason: "this model does not support server-side web search (supportsWebSearch is false)"
-            )
-        }
-        if request.responseSchema != nil, !request.tools.isEmpty {
-            throw KBLLMError.invalidRequest(
-                field: "responseSchema+tools",
-                reason: "responseSchema and tools cannot be combined in one request"
-            )
-        }
-        try request.responseSchema?.validate()
-        for tool in request.tools { try tool.validate() }
     }
 
     /// Sampling controls only when set, greedy as `temperature: 0` winning over a temperature or top-p, and the
