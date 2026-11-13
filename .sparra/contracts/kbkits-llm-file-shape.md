@@ -45,3 +45,22 @@ From the worktree root. Every git-vs-base step sets `MB=$(git merge-base HEAD or
 Changed/dropped vs standing contract, each tied to a critique point: preamble `$BASE=$(...)` removed and #4 rewritten fail-fast (pt 1); verify #9 split into tracked exact-report-path + untracked sweep, assertion 10 reworded to match (pt 2); verify #11/#12 + assertions 12/13 added as the full-diff "only these edits" gate (pt 2); verify #10 + assertion 9 rewritten with the concrete standalone-copy procedure and no-additions coverage (pt 3); verify #13 + assertion 13 add the brief's `git diff -M --stat` evidence (pt 4); "Out" bullet reworded and assertion 11 extended to record Silverpoint `make build` outcome/refusal (pt 5); verify #1 annotated conductor-only per the blocked swift probe (pt 6). No other assertion dropped.
 
 CONTRACT: AGREED
+
+## Amendment (conductor, after critique round 2; replaces verify 9, 11 and 12 and assertions 10, 12 and 13's scripted halves)
+
+The brief asks for proportionate checks and rules out hand-hardened audit scripts. Scope and "only these edits" are
+therefore settled by reading the diff, not by more shell plumbing:
+
+1. **The reviewed diff (critique points 1–3).** The judge runs `git diff -M --stat main...HEAD` and
+   `git diff -M main...HEAD -- Packages/KBLLM` and `git status --porcelain --untracked-files=all` in the graded worktree
+   and reads them. Acceptance (replacing assertions 10, 12 and 13's scripted halves): the only paths changed or added
+   are `Packages/KBLLM/Sources/KBLLM/Tooling.swift`, `Packages/KBLLM/Sources/KBLLM/JSONSchema.swift`,
+   `Packages/KBLLM/Sources/KBLLM/Seams.swift`, `Packages/KBLLM/Sources/KBLLMMacrosPlugin/MacroSupport.swift`,
+   `Packages/KBLLM/Sources/KBLLMRuntime/KBLLMRuntime.swift`, `Packages/KBLLM/Sources/KBLLMTesting/KBLLMTesting.swift` and
+   `.sparra/reports/kbkits-llm-file-shape-r1.md` (other `.sparra/` files present at `main` are the conductor's and are not
+   this unit's deliverables); `Tooling.swift` changes only by losing the `JSONSchema` block; `JSONSchema.swift` is that
+   block verbatim (verify 4) plus the header and imports it needs; the four documentation files change only in the `///`
+   lines the item names. Verify 4 (the verbatim moved block) keeps its fail-fast form.
+2. **Silverpoint's build is binding (point 4).** Assertion 11 is strengthened: the conductor's Silverpoint `make build`
+   against the changed package must exit 0. A refusal or an environment block is recorded as UN-RUN and is a gate not
+   met, not a pass.
