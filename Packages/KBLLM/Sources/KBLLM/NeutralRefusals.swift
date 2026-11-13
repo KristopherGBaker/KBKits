@@ -13,7 +13,7 @@ package enum ToolSchemaWalk: Sendable {
     /// object schema. For an adapter that sends `rawParameters` as written.
     case definition
     /// The tool's `parameters` alone, for an adapter that never sends `rawParameters` (Apple's
-    /// builds the FoundationModels schema from `parameters`, so it has no raw schema to check).
+    /// builds the on-device framework's schema from `parameters`, so it has no raw schema to check).
     case parametersOnly
 }
 
