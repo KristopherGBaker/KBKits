@@ -12,16 +12,16 @@ let package = Package(
     name: "KBLLMSmoke",
     platforms: [.macOS(.v26)],
     dependencies: [
-        .package(name: "KBLLM", path: "../../Packages/KBLLM")
+        .package(name: "KBKits", path: "../..")
     ],
     targets: [
         .executableTarget(
             name: "KBLLMSmoke",
             dependencies: [
-                .product(name: "KBLLM", package: "KBLLM"),
-                .product(name: "KBLLMAnthropic", package: "KBLLM"),
-                .product(name: "KBLLMOpenAI", package: "KBLLM"),
-                .product(name: "KBLLMURLSession", package: "KBLLM")
+                .product(name: "KBLLM", package: "KBKits"),
+                .product(name: "KBLLMAnthropic", package: "KBKits"),
+                .product(name: "KBLLMOpenAI", package: "KBKits"),
+                .product(name: "KBLLMURLSession", package: "KBKits")
             ]
         )
     ]

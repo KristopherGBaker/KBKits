@@ -1,10 +1,14 @@
 // swift-tools-version: 6.2
+import CompilerPluginSupport
+import Foundation
 import PackageDescription
 
 // Public, app-neutral Swift packages. Each product remains independently linkable while
 // one repository gives consumers a single stable dependency URL.
 let package = Package(
     name: "KBKits",
+    // KBMarkdownUI's String Catalog needs a default localization. The other targets' resources are copied, not localized.
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v26),
         .macOS(.v26)
@@ -15,6 +19,16 @@ let package = Package(
         .library(name: "KBDictionaryKit", targets: ["KBDictionaryKit"]),
         .library(name: "KBJapaneseKit", targets: ["KBJapaneseKit"]),
         .library(name: "KBKanaKit", targets: ["KBKanaKit"]),
+        .library(name: "KBLLM", targets: ["KBLLM"]),
+        .library(name: "KBLLMRuntime", targets: ["KBLLMRuntime"]),
+        .library(name: "KBLLMTesting", targets: ["KBLLMTesting"]),
+        .library(name: "KBLLMAnthropic", targets: ["KBLLMAnthropic"]),
+        .library(name: "KBLLMOpenAI", targets: ["KBLLMOpenAI"]),
+        .library(name: "KBLLMURLSession", targets: ["KBLLMURLSession"]),
+        .library(name: "KBLLMApple", targets: ["KBLLMApple"]),
+        .library(name: "KBMarkdown", targets: ["KBMarkdown"]),
+        .library(name: "KBMarkdownUI", targets: ["KBMarkdownUI"]),
+        .library(name: "KBMCPServer", targets: ["KBMCPServer"]),
         .library(name: "KBNotificationKit", targets: ["KBNotificationKit"]),
         .library(name: "KBReadingKit", targets: ["KBReadingKit"])
     ],
@@ -31,27 +45,24 @@ let package = Package(
         // Pure-Swift gzip + tar (MIT) so the Open JTalk dictionary unpacks on iOS too, where
         // there is no `Process` and no `tar`.
         .package(url: "https://github.com/tsolomko/SWCompression", from: "4.9.0"),
-        // ==========================================================================
-        // BRANCH PIN, NOT A RELEASE. This fork has no tag yet. It MUST become a tagged
-        // version before KBKits itself is released: a branch pin makes every consumer's
-        // resolution float, and SwiftPM will not accept it from a versioned dependency at
-        // all. Tracked in README.md ("Before a release").
-        // ==========================================================================
+        // The fork carries the Japanese G2P, Open JTalk and furigana work upstream does not. Its
+        // versions are `<next upstream version>-kits.N` pre-releases, so they never collide with an
+        // upstream release, and each is required exactly: a range could also take an upstream
+        // release tag a fork carries, which is upstream's code. See README.md, "Dependencies on
+        // forks".
         // We take the `MisakiJapanese` product, NOT `MisakiSwift`: the former is the Open
         // JTalk reading path alone, with no mlx-swift and no CoreFoundation, which is what
         // keeps KBJapaneseKit in the `swift test` loop and able to cross-compile.
-        .package(url: "https://github.com/KristopherGBaker/MisakiSwift", branch: "feat/japanese-g2p"),
-        // ==========================================================================
-        // BRANCH PIN, NOT A RELEASE. This fork has no tag yet either, and it MUST become a
-        // tagged version before KBKits itself is released, for the same reasons as the pin
-        // above. Tracked in README.md ("Before a release").
-        // ==========================================================================
+        .package(url: "https://github.com/KristopherGBaker/MisakiSwift", exact: "1.1.0-kits.1"),
+        // The fork is upstream's unreleased `development` plus one commit, in-memory archives on
+        // Android, which no upstream release has yet; versioned like the MisakiSwift fork. If
+        // upstream releases 0.9.21 with Android support, this can return to upstream.
         // KBAnkiKit reads and writes zips with it (an `.apkg` is a zip). MisakiSwift pins the
         // same fork, and SwiftPM keys package identity on the URL's last path component, so
         // upstream `weichsel/ZIPFoundation` and this fork are ONE identity to it: the URL and
-        // branch here must stay character-identical to MisakiSwift's, or the two locations
+        // requirement here must stay compatible with MisakiSwift's, or the two locations
         // resolve to a pin that cannot be checked out. If one moves, this moves with it.
-        .package(url: "https://github.com/KristopherGBaker/ZIPFoundation", branch: "kits-android"),
+        .package(url: "https://github.com/KristopherGBaker/ZIPFoundation", exact: "0.9.21-kits.1"),
         // Anki's current export compresses the collection with zstd, which nothing else here
         // can read: SWCompression ships Deflate/BZip2/LZMA/XZ/LZ4 and Apple's Compression
         // framework has LZFSE/LZ4/LZMA/zlib. This is upstream zstd's own SwiftPM manifest, so it
@@ -63,7 +74,12 @@ let package = Package(
         // ships SQLite in the SDK; the Android NDK does not expose it, so this vendors the
         // amalgamation. It is the Swift project's own package for this problem, so CVE and
         // version bumps are not ours to chase.
-        .package(url: "https://github.com/swiftlang/swift-toolchain-sqlite", from: "1.0.12")
+        .package(url: "https://github.com/swiftlang/swift-toolchain-sqlite", from: "1.0.12"),
+        // KBLLM's macros. The range is the one KBLLM declared as its own package: every swift-syntax
+        // release its macro plugin builds against.
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "601.0.0"..<"604.0.0"),
+        // KBMarkdown parses with Apple's swift-markdown.
+        .package(url: "https://github.com/swiftlang/swift-markdown.git", from: "0.6.0")
     ],
     targets: [
         // Reading and writing Anki `.apkg` decks: the archive layout, the collection database
@@ -245,9 +261,81 @@ let package = Package(
             dependencies: ["KBNotificationKit"],
             path: "Packages/KBNotificationKit/Tests/KBNotificationKitTests",
             swiftSettings: .house
+        ),
+
+        // KBLLM, KBMCPServer and KBMarkdownKit were packages of their own until 1.1.0. Their targets keep the settings they
+        // had there (Swift 6 mode, no `.house` upcoming features), so moving them here changes no behaviour.
+        .target(name: "KBLLM", dependencies: ["KBLLMMacros"], path: "Packages/KBLLM/Sources/KBLLM"),
+        .target(name: "KBLLMMacros", dependencies: ["KBLLMMacrosPlugin"], path: "Packages/KBLLM/Sources/KBLLMMacros"),
+        .macro(
+            name: "KBLLMMacrosPlugin",
+            dependencies: [
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax")
+            ],
+            path: "Packages/KBLLM/Sources/KBLLMMacrosPlugin"
+        ),
+        .target(name: "KBLLMTesting", dependencies: ["KBLLM"], path: "Packages/KBLLM/Sources/KBLLMTesting"),
+        .target(name: "KBLLMRuntime", dependencies: ["KBLLM"], path: "Packages/KBLLM/Sources/KBLLMRuntime"),
+        .target(name: "KBLLMAnthropic", dependencies: ["KBLLM"], path: "Packages/KBLLM/Sources/KBLLMAnthropic"),
+        .target(name: "KBLLMOpenAI", dependencies: ["KBLLM"], path: "Packages/KBLLM/Sources/KBLLMOpenAI"),
+        .target(name: "KBLLMURLSession", dependencies: ["KBLLM"], path: "Packages/KBLLM/Sources/KBLLMURLSession"),
+        .target(name: "KBLLMApple", dependencies: ["KBLLM"], path: "Packages/KBLLM/Sources/KBLLMApple"),
+        .testTarget(name: "KBLLMTests", dependencies: ["KBLLM", "KBLLMTesting"], path: "Packages/KBLLM/Tests/KBLLMTests"),
+        .testTarget(
+            name: "KBLLMRuntimeTests",
+            dependencies: ["KBLLM", "KBLLMRuntime", "KBLLMTesting"],
+            path: "Packages/KBLLM/Tests/KBLLMRuntimeTests"
+        ),
+        .testTarget(
+            name: "KBLLMProvidersTests",
+            dependencies: ["KBLLMAnthropic", "KBLLMOpenAI", "KBLLM", "KBLLMTesting", "KBLLMRuntime"],
+            path: "Packages/KBLLM/Tests/KBLLMProvidersTests"
+        ),
+        .testTarget(
+            name: "KBLLMURLSessionTests",
+            dependencies: ["KBLLMURLSession", "KBLLM", "KBLLMTesting", "KBLLMAnthropic"],
+            path: "Packages/KBLLM/Tests/KBLLMURLSessionTests"
+        ),
+        .testTarget(
+            name: "KBLLMAppleTests",
+            dependencies: ["KBLLMApple", "KBLLM", "KBLLMTesting"],
+            path: "Packages/KBLLM/Tests/KBLLMAppleTests"
+        ),
+        .target(name: "KBMCPServer", path: "Packages/KBMCPServer/Sources/KBMCPServer"),
+        .testTarget(name: "KBMCPServerTests", dependencies: ["KBMCPServer"], path: "Packages/KBMCPServer/Tests/KBMCPServerTests"),
+        .target(
+            name: "KBMarkdown",
+            dependencies: [.product(name: "Markdown", package: "swift-markdown")],
+            path: "Packages/KBMarkdownKit/Sources/KBMarkdown",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .target(
+            name: "KBMarkdownUI",
+            dependencies: ["KBMarkdown"],
+            path: "Packages/KBMarkdownKit/Sources/KBMarkdownUI",
+            resources: [.process("Localizable.xcstrings")],
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "KBMarkdownTests",
+            dependencies: ["KBMarkdown"],
+            path: "Packages/KBMarkdownKit/Tests/KBMarkdownTests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
+        ),
+        .testTarget(
+            name: "KBMarkdownUITests",
+            dependencies: ["KBMarkdown", "KBMarkdownUI"],
+            path: "Packages/KBMarkdownKit/Tests/KBMarkdownUITests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         )
     ]
 )
+
+// The DocC plugin only when building documentation (`KBLLM_BUILD_DOCS=1`), as KBLLM had it, so no consumer resolves it.
+if ProcessInfo.processInfo.environment["KBLLM_BUILD_DOCS"] != nil {
+    package.dependencies.append(.package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.0.0"))
+}
 
 extension Array where Element == SwiftSetting {
     static var house: [SwiftSetting] {

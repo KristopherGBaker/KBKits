@@ -247,8 +247,9 @@ struct SourceContentTests {
         // Read the AUTHORITATIVE resolved target set from `swift package dump-package`,
         // whose JSON has every manifest expression evaluated. Parsing Package.swift as
         // text is defeatable by binding a target name to a constant; the resolved dump
-        // is not. Compare the COMPLETE set for exact equality.
-        let declared = try resolvedTargetNames()
+        // is not. The manifest is the KBKits root's, which declares every library, so the
+        // set compared is KBLLM's part of it (every target named `KBLLM…`), for exact equality.
+        let declared = try resolvedTargetNames().filter { $0.hasPrefix("KBLLM") }
         let unexpected = declared.subtracting(expected).sorted()
         let missing = expected.subtracting(declared).sorted()
         #expect(unexpected.isEmpty, "manifest declares unexpected target(s): \(unexpected)")
@@ -264,7 +265,7 @@ struct SourceContentTests {
     /// Invoke `swift package dump-package` and return its evaluated manifest, so a target
     /// added by any means (a literal name or a name bound to a constant) is reflected here.
     ///
-    /// The dump runs against an isolated temporary copy of `Package.swift`, not the live
+    /// The dump runs against an isolated temporary copy of the repository root's `Package.swift`, not the live
     /// package: a `dump-package` pointed at the live package path blocks indefinitely on
     /// the SwiftPM workspace lock held by the concurrently running `swift test`. A fresh
     /// throwaway workspace evaluates the identical manifest with no lock contention, and
@@ -276,7 +277,7 @@ struct SourceContentTests {
         try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: workspace) }
         try FileManager.default.copyItem(
-            at: SourceReader.packageRoot.appendingPathComponent("Package.swift"),
+            at: SourceReader.repositoryRoot.appendingPathComponent("Package.swift"),
             to: workspace.appendingPathComponent("Package.swift")
         )
 
@@ -313,7 +314,7 @@ struct SourceContentTests {
     // MARK: Transport assertion 14 - the Tools smoke harness stays out of lint and the suite.
 
     @Test func toolsSmokeHarnessIsOutsideLintAndTheSuite() throws {
-        // (a) No target in the resolved KBLLM manifest draws its sources from `Tools/`.
+        // (a) No target in the resolved KBKits manifest draws its sources from `Tools/`.
         for target in try resolvedManifest().targets {
             if let path = target.path {
                 #expect(!path.contains("Tools"), "no package target may source from Tools/, found \(path)")

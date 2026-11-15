@@ -26,6 +26,12 @@ enum SourceReader {
         FileManager.default.fileExists(atPath: packageRoot.appendingPathComponent("Sources").path)
     }
 
+    /// The KBKits repository root, two directories above `packageRoot`: since KBKits 1.1.0 its one `Package.swift`
+    /// declares KBLLM's targets beside every other library's.
+    static var repositoryRoot: URL {
+        packageRoot.deletingLastPathComponent().deletingLastPathComponent()
+    }
+
     static var sourcesRoot: URL { packageRoot.appendingPathComponent("Sources") }
     static var testsRoot: URL { packageRoot.appendingPathComponent("Tests") }
 
